@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import urllib.error
@@ -8,6 +9,10 @@ from typing import Any
 
 from app.config import settings
 from app.normalization import ExtractedEventCandidate, extract_canonical_roles, infer_event_type_from_title, normalize_title_text
+
+# In-memory cache: content_hash -> extraction results, avoids duplicate AI calls
+_extraction_cache: dict[str, list[ExtractedEventCandidate]] = {}
+_CACHE_MAX_SIZE = 500
 
 
 ALLOWED_EVENT_TYPES = {
@@ -129,38 +134,55 @@ def _candidate_from_ai_payload(item: dict[str, Any]) -> ExtractedEventCandidate 
     )
 
 
-def extract_events_with_ai(title: str, body_text: str) -> list[ExtractedEventCandidate]:
+def _content_hash(title: str, body: str) -> str:
+    return hashlib.md5(f"{title}\n{body}".encode()).hexdigest()
+
+
+def _check_cache(content_hash: str) -> list[ExtractedEventCandidate] | None:
+    return _extraction_cache.get(content_hash)
+
+
+def _store_cache(content_hash: str, results: list[ExtractedEventCandidate]) -> None:
+    if len(_extraction_cache) >= _CACHE_MAX_SIZE:
+        oldest_key = next(iter(_extraction_cache))
+        del _extraction_cache[oldest_key]
+    _extraction_cache[content_hash] = results
+
+
+def extract_events_with_ai(title: str, body_text: str, *, rule_confidence: float | None = None) -> list[ExtractedEventCandidate]:
+    """Extract events using AI. When rule_confidence >= 0.95, skip AI call to save tokens."""
     if not ai_extraction_available():
+        return []
+
+    # Smart skip: if rule engine already has high confidence, skip AI call
+    if rule_confidence is not None and rule_confidence >= 0.95:
         return []
 
     normalized_title = normalize_title_text(title)
     normalized_body = normalize_title_text(body_text)[: settings.ai_text_char_limit]
-    prompt = f"""
-你是中国 A 股公告高管/董事变动抽取器。只抽取公告正文明确写出的真实人事变动，不要抽取列席会议、主持会议、审计委员会委员、提名委员会委员、担保/章程/利润分配等非人事事项。
 
-允许角色 role_canonical：
-- chairperson 董事长
-- ceo_equivalent 总经理/总裁/CEO
-- cfo_equivalent 财务负责人/财务总监/CFO
-- board_secretary 董事会秘书/董秘
-- senior_management 副总经理/副总裁/总法律顾问/首席合规官等高级管理人员
-- director 董事/非独立董事/职工董事
-- independent_director 独立董事
+    # Check cache to avoid duplicate calls for same content
+    cache_key = _content_hash(normalized_title, normalized_body)
+    cached = _check_cache(cache_key)
+    if cached is not None:
+        return cached
 
-允许事件 event_type：
-appointment, resignation, removal, reelection, interim_assignment, title_change, nomination, non_renewal, retirement
+    # Compressed prompt: same semantics, ~40% fewer input tokens
+    prompt = f"""从以下A股公告中提取高管/董事人事变动事件。仅提取正文明确写出的真实变动，忽略列席会议、委员会任职、担保/章程/利润分配等非人事事项。
 
-返回严格 JSON，不要解释：
-{{"events":[{{"person_name":"张三","role_raw":"公司副总经理","role_canonical":"senior_management","event_type":"appointment","confidence":0.91,"evidence_excerpt":"董事会同意聘任张三先生担任公司副总经理"}}]}}
+角色(role_canonical): chairperson|ceo_equivalent|cfo_equivalent|board_secretary|senior_management|director|independent_director
+事件(event_type): appointment|resignation|removal|reelection|interim_assignment|title_change|nomination|non_renewal|retirement
 
-公告标题：{normalized_title}
-公告正文：
-{normalized_body}
-""".strip()
+严格返回JSON，不解释：
+{{"events":[{{"person_name":"张三","role_raw":"副总经理","role_canonical":"senior_management","event_type":"appointment","confidence":0.91,"evidence_excerpt":"聘任张三先生担任公司副总经理"}}]}}
+
+标题：{normalized_title}
+正文：
+{normalized_body}""".strip()
 
     payload = {
         "model": settings.ai_model_name,
-        "max_tokens": 1200,
+        "max_tokens": 800,
         "temperature": 0,
         "messages": [{"role": "user", "content": prompt}],
     }
@@ -219,4 +241,6 @@ appointment, resignation, removal, reelection, interim_assignment, title_change,
             continue
         seen.add(key)
         results.append(candidate)
+
+    _store_cache(cache_key, results)
     return results

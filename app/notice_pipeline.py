@@ -305,7 +305,9 @@ def evaluate_notice_auto_review(title: str, body_text: str) -> AutoReviewDecisio
         )
 
     rule_candidates = extract_events_from_text(title, body_text)
-    ai_candidates = extract_events_with_ai(title, body_text) if ai_extraction_available() else []
+    # Pass max rule confidence to AI extractor for smart-skip optimization
+    rule_max_conf = max((c.confidence for c in rule_candidates), default=None) if rule_candidates else None
+    ai_candidates = extract_events_with_ai(title, body_text, rule_confidence=rule_max_conf) if ai_extraction_available() else []
     merged_candidates = _merge_candidate_consensus(rule_candidates, ai_candidates)
     title_event_type = infer_event_type_from_title(title)
     title_person_name = extract_person_name_from_title(title)

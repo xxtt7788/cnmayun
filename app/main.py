@@ -54,6 +54,7 @@ from app.services import (
     delete_watchlist,
     export_events_rows,
     get_stats,
+    get_token_monitor_stats,
     record_page_view,
     get_baseline_summary,
     get_company_detail,
@@ -512,6 +513,12 @@ def coverage_page(request: Request, db: Session = Depends(get_db)):
 def stats_page(request: Request, db: Session = Depends(get_db)):
     stats = get_stats(db)
     return templates.TemplateResponse(request, "stats.html", {"stats": stats})
+
+
+@app.get("/token-monitor", response_class=HTMLResponse)
+def token_monitor_page(request: Request, db: Session = Depends(get_db)):
+    token_stats = get_token_monitor_stats(db)
+    return templates.TemplateResponse(request, "token_monitor.html", {"token_stats": token_stats})
 
 
 @app.get("/launch-readiness", response_class=HTMLResponse)
@@ -1101,3 +1108,8 @@ def review_retry_company_api(ticker: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Company not found")
     db.commit()
     return {"ok": True}
+
+
+@app.get("/api/token-monitor")
+def token_monitor_api(db: Session = Depends(get_db)):
+    return get_token_monitor_stats(db)

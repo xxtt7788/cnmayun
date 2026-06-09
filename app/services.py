@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.config import settings
 from app.models import (
     Alert,
+    AIUsageLog,
     BaselineRun,
     Company,
     CompanyMetricDaily,
@@ -1555,4 +1556,135 @@ def get_stats(db: Session) -> dict:
         "ai_today_calls": ai_today_calls,
         "ai_today_failures": ai_failures,
         "visitors": visitors,
+    }
+
+
+def get_token_monitor_stats(db: Session) -> dict:
+    from datetime import timedelta
+
+    now = datetime.utcnow()
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    week_start = today_start - timedelta(days=6)
+    month_start = today_start - timedelta(days=29)
+
+    # Period summaries
+    def _period_stats(start: datetime | None = None) -> dict:
+        filters = [AIUsageLog.success == True]
+        if start:
+            filters.append(AIUsageLog.created_at >= start)
+        q = select(
+            func.count().label("calls"),
+            func.coalesce(func.sum(AIUsageLog.prompt_tokens), 0).label("prompt_tokens"),
+            func.coalesce(func.sum(AIUsageLog.completion_tokens), 0).label("completion_tokens"),
+            func.coalesce(func.sum(AIUsageLog.total_tokens), 0).label("total_tokens"),
+        ).where(*filters)
+        row = db.execute(q).one()
+        fail_q = select(func.count()).select_from(AIUsageLog).where(
+            AIUsageLog.success == False, *(f for f in filters if f is not filters[0])
+        )
+        if start:
+            fail_q = fail_q.where(AIUsageLog.created_at >= start)
+        failures = db.scalar(fail_q) or 0
+        return {
+            "calls": row.calls,
+            "prompt_tokens": int(row.prompt_tokens),
+            "completion_tokens": int(row.completion_tokens),
+            "total_tokens": int(row.total_tokens),
+            "failures": failures,
+            "avg_tokens_per_call": round(int(row.total_tokens) / row.calls, 1) if row.calls else 0,
+        }
+
+    # Daily trend (14 days)
+    day_col = func.date(AIUsageLog.created_at).label("day")
+    daily_rows = db.execute(
+        select(
+            day_col,
+            func.count().label("calls"),
+            func.coalesce(func.sum(AIUsageLog.prompt_tokens), 0).label("prompt_tokens"),
+            func.coalesce(func.sum(AIUsageLog.completion_tokens), 0).label("completion_tokens"),
+            func.coalesce(func.sum(AIUsageLog.total_tokens), 0).label("total_tokens"),
+        )
+        .where(AIUsageLog.success == True)
+        .group_by(day_col)
+        .order_by(desc(day_col))
+        .limit(14)
+    ).all()
+    daily_trend = [
+        {
+            "day": str(row.day),
+            "calls": row.calls,
+            "prompt_tokens": int(row.prompt_tokens),
+            "completion_tokens": int(row.completion_tokens),
+            "total_tokens": int(row.total_tokens),
+        }
+        for row in daily_rows
+    ]
+
+    # By source breakdown
+    source_rows = db.execute(
+        select(
+            func.coalesce(AIUsageLog.request_source, "unknown").label("source"),
+            func.count().label("calls"),
+            func.coalesce(func.sum(AIUsageLog.total_tokens), 0).label("total_tokens"),
+        )
+        .where(AIUsageLog.success == True)
+        .group_by("source")
+        .order_by(desc("total_tokens"))
+        .limit(20)
+    ).all()
+    by_source = [
+        {"source": row.source[:60], "calls": row.calls, "total_tokens": int(row.total_tokens)}
+        for row in source_rows
+    ]
+
+    # Recent calls (last 50)
+    recent_rows = db.scalars(
+        select(AIUsageLog).order_by(desc(AIUsageLog.created_at)).limit(50)
+    ).all()
+    recent_calls = [
+        {
+            "time": row.created_at.strftime("%m-%d %H:%M") if row.created_at else "-",
+            "model": row.model_name,
+            "prompt_tokens": row.prompt_tokens,
+            "completion_tokens": row.completion_tokens,
+            "total_tokens": row.total_tokens,
+            "source": (row.request_source or "")[:60],
+            "success": row.success,
+            "error": (row.error_message or "")[:80] if not row.success else "",
+        }
+        for row in recent_rows
+    ]
+
+    # By model breakdown
+    model_rows = db.execute(
+        select(
+            AIUsageLog.model_name.label("model"),
+            func.count().label("calls"),
+            func.coalesce(func.sum(AIUsageLog.total_tokens), 0).label("total_tokens"),
+        )
+        .where(AIUsageLog.success == True)
+        .group_by("model")
+        .order_by(desc("total_tokens"))
+    ).all()
+    by_model = [
+        {"model": row.model, "calls": row.calls, "total_tokens": int(row.total_tokens)}
+        for row in model_rows
+    ]
+
+    # Estimated cost (Moonshot/Kimi pricing: input ¥0.012/1K, output ¥0.012/1K)
+    cumulative = _period_stats(None)
+    estimated_cost_cny = round(
+        (cumulative["prompt_tokens"] * 0.012 + cumulative["completion_tokens"] * 0.012) / 1000, 2
+    )
+
+    return {
+        "today": _period_stats(today_start),
+        "week": _period_stats(week_start),
+        "month": _period_stats(month_start),
+        "cumulative": cumulative,
+        "daily_trend": daily_trend,
+        "by_source": by_source,
+        "by_model": by_model,
+        "recent_calls": recent_calls,
+        "estimated_cost_cny": estimated_cost_cny,
     }

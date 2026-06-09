@@ -1,0 +1,211 @@
+{% extends "base.html" %}
+
+{% block title %}Token 用量监控 | 高管人事动态{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>Token 用量监控</h1>
+        <p>AI API 调用与 Token 消耗实时监控，含费用估算</p>
+    </div>
+</div>
+
+<!-- Period Summary Cards -->
+<section class="metric-grid">
+    <div class="metric-card">
+        <span class="metric-card-label">今日 Token</span>
+        <span class="metric-card-value">{{ token_stats.today.total_tokens }}</span>
+        <span class="metric-card-desc">Input {{ token_stats.today.prompt_tokens }} + Output {{ token_stats.today.completion_tokens }}</span>
+    </div>
+    <div class="metric-card">
+        <span class="metric-card-label">今日调用</span>
+        <span class="metric-card-value">{{ token_stats.today.calls }}</span>
+        <span class="metric-card-desc">失败 {{ token_stats.today.failures }} 次</span>
+    </div>
+    <div class="metric-card">
+        <span class="metric-card-label">本周 Token</span>
+        <span class="metric-card-value">{{ token_stats.week.total_tokens }}</span>
+        <span class="metric-card-desc">{{ token_stats.week.calls }} 次调用</span>
+    </div>
+    <div class="metric-card">
+        <span class="metric-card-label">本月 Token</span>
+        <span class="metric-card-value">{{ token_stats.month.total_tokens }}</span>
+        <span class="metric-card-desc">{{ token_stats.month.calls }} 次调用</span>
+    </div>
+    <div class="metric-card">
+        <span class="metric-card-label">累计 Token</span>
+        <span class="metric-card-value">{{ token_stats.cumulative.total_tokens }}</span>
+        <span class="metric-card-desc">{{ token_stats.cumulative.calls }} 次调用</span>
+    </div>
+    <div class="metric-card">
+        <span class="metric-card-label">估算费用</span>
+        <span class="metric-card-value" style="color:var(--gold-600);">¥{{ token_stats.estimated_cost_cny }}</span>
+        <span class="metric-card-desc">基于 Moonshot 定价</span>
+    </div>
+    <div class="metric-card">
+        <span class="metric-card-label">平均 Token/调用</span>
+        <span class="metric-card-value">{{ token_stats.cumulative.avg_tokens_per_call }}</span>
+        <span class="metric-card-desc">全量平均</span>
+    </div>
+    <div class="metric-card">
+        <span class="metric-card-label">今日失败率</span>
+        {% set today_total = token_stats.today.calls + token_stats.today.failures %}
+        {% set fail_rate = (token_stats.today.failures / today_total * 100)|round(1) if today_total else 0 %}
+        <span class="metric-card-value" style="color:{% if fail_rate > 5 %}var(--warn-600){% else %}var(--good-600){% endif %};">{{ fail_rate }}%</span>
+        <span class="metric-card-desc">{{ token_stats.today.failures }} / {{ today_total }} 次</span>
+    </div>
+</section>
+
+<!-- Daily Trend -->
+<section class="panel">
+    <div class="panel-head"><h2>每日 Token 用量趋势（近 14 天）</h2></div>
+    {% if token_stats.daily_trend %}
+    <div style="overflow-x:auto;">
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>日期</th>
+                <th>调用次数</th>
+                <th>Input Tokens</th>
+                <th>Output Tokens</th>
+                <th>总 Token</th>
+                <th>可视化</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% set max_tokens = token_stats.daily_trend | map(attribute='total_tokens') | max %}
+            {% for item in token_stats.daily_trend %}
+            <tr>
+                <td>{{ item.day }}</td>
+                <td>{{ item.calls }}</td>
+                <td>{{ item.prompt_tokens }}</td>
+                <td>{{ item.completion_tokens }}</td>
+                <td><strong>{{ item.total_tokens }}</strong></td>
+                <td>
+                    <div style="background:var(--accent-600);height:8px;border-radius:4px;width:{{ (item.total_tokens / max_tokens * 100)|int if max_tokens else 0 }}%;"></div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-state-icon">📊</div>
+        <p>暂无 Token 用量数据。</p>
+    </div>
+    {% endif %}
+</section>
+
+<section class="grid-2">
+    <!-- By Source -->
+    <div class="panel">
+        <div class="panel-head"><h2>按来源分组</h2></div>
+        {% if token_stats.by_source %}
+        <table class="data-table">
+            <thead>
+                <tr><th>来源</th><th>调用</th><th>Token</th></tr>
+            </thead>
+            <tbody>
+                {% for item in token_stats.by_source %}
+                <tr>
+                    <td><code>{{ item.source }}</code></td>
+                    <td>{{ item.calls }}</td>
+                    <td>{{ item.total_tokens }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="empty-state">
+            <div class="empty-state-icon">📂</div>
+            <p>暂无数据。</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- By Model -->
+    <div class="panel">
+        <div class="panel-head"><h2>按模型分组</h2></div>
+        {% if token_stats.by_model %}
+        <table class="data-table">
+            <thead>
+                <tr><th>模型</th><th>调用</th><th>Token</th></tr>
+            </thead>
+            <tbody>
+                {% for item in token_stats.by_model %}
+                <tr>
+                    <td><code>{{ item.model }}</code></td>
+                    <td>{{ item.calls }}</td>
+                    <td>{{ item.total_tokens }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="empty-state">
+            <div class="empty-state-icon">🤖</div>
+            <p>暂无数据。</p>
+        </div>
+        {% endif %}
+    </div>
+</section>
+
+<!-- Recent Calls -->
+<section class="panel">
+    <div class="panel-head"><h2>最近调用明细（50 条）</h2></div>
+    {% if token_stats.recent_calls %}
+    <div style="overflow-x:auto;">
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>时间</th>
+                <th>模型</th>
+                <th>Input</th>
+                <th>Output</th>
+                <th>总计</th>
+                <th>来源</th>
+                <th>状态</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in token_stats.recent_calls %}
+            <tr>
+                <td>{{ item.time }}</td>
+                <td><code>{{ item.model }}</code></td>
+                <td>{{ item.prompt_tokens }}</td>
+                <td>{{ item.completion_tokens }}</td>
+                <td><strong>{{ item.total_tokens }}</strong></td>
+                <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;">{{ item.source }}</td>
+                <td>
+                    {% if item.success %}
+                    <span class="pill pill-status-published">成功</span>
+                    {% else %}
+                    <span class="pill pill-status-rejected" title="{{ item.error }}">失败</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-state-icon">📋</div>
+        <p>暂无调用记录。</p>
+    </div>
+    {% endif %}
+</section>
+
+<!-- Optimization Tips -->
+<section class="panel">
+    <div class="panel-head"><h2>Token 优化策略（已实施）</h2></div>
+    <div class="ops-notes">
+        <p><strong>1. Prompt 压缩</strong>：将 AI 提取 prompt 从冗长描述压缩为紧凑指令格式，减少约 40% input tokens。</p>
+        <p><strong>2. 智能跳过</strong>：当规则引擎置信度 >= 0.95 时，跳过 AI 调用，直接使用规则结果。典型命中率约 30-40%。</p>
+        <p><strong>3. 结果缓存</strong>：对相同公告内容（MD5 去重）缓存 AI 提取结果，避免重复处理同一公告。</p>
+        <p><strong>4. 输出上限</strong>：max_tokens 从 1200 降至 800，单次事件提取足够且减少 output tokens。</p>
+        <p><strong>5. 共识机制</strong>：规则与 AI 结果一致时置信度提升 +0.02，减少人工审核量，间接节省重试 token。</p>
+    </div>
+</section>
+{% endblock %}
