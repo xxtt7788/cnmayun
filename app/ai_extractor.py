@@ -48,7 +48,7 @@ ALLOWED_EVENT_TYPES = {
     "retirement",
 }
 
-# Regex patterns for body text pre-filtering — strips procedural/boilerplate content
+# Regex patterns for body text pre-filtering
 _PREFILTER_PATTERNS = [
     re.compile(r"会议于.{5,30}召开.*?(?=。|$)", re.DOTALL),
     re.compile(r"应到董事\d+人.*?出席董事\d+人", re.DOTALL),
@@ -68,13 +68,13 @@ _PREFILTER_PATTERNS = [
 # Personnel keywords for paragraph extraction
 _PERSONNEL_KEYWORDS = re.compile(r"聘任|任命|选举|选聘|当选|提名|辞职|辞任|辞去|免去|免职|解聘|不再担任|代行|补选|换届|退休|离任")
 
-# Ultra-compressed system prompt (~120 tokens)
-_SYSTEM_PROMPT = """从A股公告提取人事变动。忽略列席/委员会/担保/章程/分红等非人事项。
+# Minimal system prompt (~90 tokens) — removed evidence_excerpt from output schema
+_SYSTEM_PROMPT = """从A股公告提取人事变动。忽略列席/委员会/担保/章程/分红等。
 角色:chairperson|ceo_equivalent|cfo_equivalent|board_secretary|senior_management|director|independent_director
 事件:appointment|resignation|removal|reelection|interim_assignment|title_change|nomination|non_renewal|retirement
-返JSON:{"events":[{"person_name":"名","role_raw":"原职","role_canonical":"角色","event_type":"事件","evidence_excerpt":"原文"}]}"""
+返:{"events":[{"p":"名","r":"原职","c":"角色","e":"事件","x":"原文片段"}]}"""
 
-_USER_TEMPLATE = "标题：{title}\n正文：\n{body}"
+_USER_TEMPLATE = "{title}\n{body}"
 
 
 def ai_extraction_available() -> bool:
@@ -84,7 +84,6 @@ def ai_extraction_available() -> bool:
 
 
 def get_optimization_stats() -> dict:
-    """Return in-memory optimization counters for monitoring dashboard."""
     return dict(_optimization_stats)
 
 
@@ -98,7 +97,6 @@ def _record_ai_usage(
     success: bool = True,
     error_message: str | None = None,
 ) -> None:
-    """Record AI API usage to database (fire-and-forget)."""
     try:
         from app.db import SessionLocal
         from app.models import AIUsageLog
@@ -130,7 +128,6 @@ def _messages_url() -> str:
 
 
 def _prefilter_body(text: str) -> str:
-    """Strip procedural/boilerplate content from announcement body to reduce AI input tokens."""
     original_len = len(text)
     for pattern in _PREFILTER_PATTERNS:
         text = pattern.sub("", text)
@@ -142,8 +139,7 @@ def _prefilter_body(text: str) -> str:
 
 
 def _extract_relevant_paragraphs(text: str, max_chars: int) -> str:
-    """Extract only paragraphs containing personnel keywords + 1 context paragraph each side.
-    Falls back to full truncated text if no keywords found."""
+    """Extract only paragraphs containing personnel keywords + 1 context paragraph."""
     paragraphs = re.split(r"\n+|[。；;]", text)
     paragraphs = [p.strip() for p in paragraphs if len(p.strip()) > 15]
 
@@ -179,11 +175,10 @@ def _extract_relevant_paragraphs(text: str, max_chars: int) -> str:
 
 
 def _check_token_budget() -> bool:
-    """Check if current token usage is within daily/hourly budget. Returns True if OK to proceed."""
     if settings.ai_daily_token_budget <= 0 and settings.ai_hourly_token_budget <= 0:
         return True
     try:
-        from datetime import datetime, timedelta
+        from datetime import datetime
         from sqlalchemy import func, select
         from app.db import SessionLocal
         from app.models import AIUsageLog
@@ -241,37 +236,37 @@ def _normalize_person_name(raw_name: Any) -> str | None:
 
 
 def _candidate_from_ai_payload(item: dict[str, Any]) -> ExtractedEventCandidate | None:
-    person_name = _normalize_person_name(item.get("person_name"))
+    # Support both short keys (p,r,c,e,x) and long keys (person_name, etc.) for backward compat
+    person_name = _normalize_person_name(item.get("p") or item.get("person_name"))
     if not person_name:
         return None
 
-    role_raw = normalize_title_text(str(item.get("role_raw") or ""))
-    role_canonical = str(item.get("role_canonical") or "").strip()
+    role_raw = normalize_title_text(str(item.get("r") or item.get("role_raw") or ""))
+    role_canonical = str(item.get("c") or item.get("role_canonical") or "").strip()
     if role_canonical not in extract_canonical_roles(role_raw):
         roles = extract_canonical_roles(f"{role_raw} {role_canonical}")
         role_canonical = roles[0] if roles else role_canonical
     if not role_canonical:
         return None
 
-    event_type = str(item.get("event_type") or "").strip()
+    event_type = str(item.get("e") or item.get("event_type") or "").strip()
     if event_type not in ALLOWED_EVENT_TYPES:
-        inferred = infer_event_type_from_title(str(item.get("evidence_excerpt") or ""))
+        excerpt_text = str(item.get("x") or item.get("evidence_excerpt") or "")
+        inferred = infer_event_type_from_title(excerpt_text)
         if not inferred:
             return None
         event_type = inferred
 
-    excerpt = normalize_title_text(str(item.get("evidence_excerpt") or ""))[:180]
+    excerpt = normalize_title_text(str(item.get("x") or item.get("evidence_excerpt") or ""))[:180]
     if not excerpt or person_name not in excerpt:
         return None
 
-    # Use fixed confidence — avoid AI returning unreliable confidence values
-    confidence = 0.86
     return ExtractedEventCandidate(
         person_name=person_name,
         role_canonical=role_canonical,
         event_type=event_type,
         excerpt=excerpt,
-        confidence=confidence,
+        confidence=0.86,
     )
 
 
@@ -297,38 +292,42 @@ def extract_events_with_ai(
     rule_confidence: float | None = None,
     rule_candidate_count: int = 0,
 ) -> list[ExtractedEventCandidate]:
-    """Extract events using AI. Aggressively skips calls when not needed."""
+    """Extract events using AI. Only called when rules can't handle it."""
     if not ai_extraction_available():
         return []
 
-    # Skip 1: rule engine already confident enough
-    if rule_confidence is not None and rule_confidence >= 0.90:
+    # Skip 1: rule engine already found candidates with good confidence
+    if rule_confidence is not None and rule_confidence >= 0.85:
         _optimization_stats["smart_skips"] += 1
         return []
 
-    # Skip 2: single rule candidate with decent confidence
-    if rule_candidate_count == 1 and rule_confidence is not None and rule_confidence >= 0.88:
-        _optimization_stats["smart_skips"] += 1
-        return []
-
-    # Skip 3: no management motion signal in body at all — AI will return empty anyway
-    # 44% of calls produce near-empty output, meaning AI found nothing. Pre-filter these.
+    # Skip 2: no management motion signal at all — AI would return empty
     normalized_title = normalize_title_text(title)
     title_event_type = infer_event_type_from_title(normalized_title)
     title_person_name = extract_person_name_from_title(normalized_title)
-    if not title_event_type and not title_person_name and not body_has_management_motion(body_text):
+    has_body_signal = body_has_management_motion(body_text)
+    if not title_event_type and not title_person_name and not has_body_signal:
         _optimization_stats["no_signal_skips"] += 1
         return []
 
-    # Check token budget before making API call
+    # Skip 3: title alone gives full event info (person + role + event type)
+    # and body confirms it — rules likely already covered, or AI won't add value
+    if title_person_name and title_event_type and rule_candidate_count > 0:
+        _optimization_stats["smart_skips"] += 1
+        return []
+
+    # Check token budget
     if not _check_token_budget():
         return []
 
     normalized_body = _prefilter_body(normalize_title_text(body_text))
-    # Smart paragraph extraction: only send paragraphs with personnel keywords + context
     normalized_body = _extract_relevant_paragraphs(normalized_body, settings.ai_text_char_limit)
 
-    # Check cache to avoid duplicate calls for same content
+    # Adaptive char limit: if title already has person+event, body only needs short context
+    if title_person_name and title_event_type:
+        normalized_body = normalized_body[:2000]
+
+    # Check cache
     cache_key = _content_hash(normalized_title, normalized_body)
     cached = _check_cache(cache_key)
     if cached is not None:
@@ -337,7 +336,7 @@ def extract_events_with_ai(
 
     payload = {
         "model": settings.ai_model_name,
-        "max_tokens": 256,
+        "max_tokens": 200,
         "temperature": 0,
         "system": _SYSTEM_PROMPT,
         "messages": [{"role": "user", "content": _USER_TEMPLATE.format(title=normalized_title, body=normalized_body)}],
@@ -353,7 +352,6 @@ def extract_events_with_ai(
         method="POST",
     )
 
-    # Retry with exponential backoff for 429 errors
     max_retries = 2
     for attempt in range(max_retries + 1):
         try:
@@ -362,13 +360,11 @@ def extract_events_with_ai(
             break
         except urllib.error.HTTPError as exc:
             if exc.code == 429 and attempt < max_retries:
-                wait = (2 ** attempt) + 0.5  # 0.5s, 2.5s
-                time.sleep(wait)
+                time.sleep((2 ** attempt) + 0.5)
                 continue
             if exc.code == 403:
-                # 403 = API key issue or quota exhausted — cooldown for 1 hour
                 _api_cooldown_until = time.time() + 3600
-                _record_ai_usage(model=settings.ai_model_name, success=False, error_message=f"HTTP 403: cooldown 1h")
+                _record_ai_usage(model=settings.ai_model_name, success=False, error_message="HTTP 403: cooldown 1h")
                 return []
             _record_ai_usage(model=settings.ai_model_name, success=False, error_message=str(exc)[:500])
             return []
