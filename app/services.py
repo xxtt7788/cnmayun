@@ -1562,6 +1562,8 @@ def get_stats(db: Session) -> dict:
 def get_token_monitor_stats(db: Session) -> dict:
     from datetime import timedelta
 
+    from app.ai_extractor import get_optimization_stats
+
     now = datetime.utcnow()
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     week_start = today_start - timedelta(days=6)
@@ -1618,6 +1620,27 @@ def get_token_monitor_stats(db: Session) -> dict:
             "total_tokens": int(row.total_tokens),
         }
         for row in daily_rows
+    ]
+
+    # Hourly trend (24 hours)
+    hour_col = func.date_trunc("hour", AIUsageLog.created_at).label("hour") if not settings.uses_sqlite else func.strftime("%Y-%m-%d %H:00", AIUsageLog.created_at).label("hour")
+    hourly_rows = db.execute(
+        select(
+            hour_col,
+            func.count().label("calls"),
+            func.coalesce(func.sum(AIUsageLog.total_tokens), 0).label("total_tokens"),
+        )
+        .where(AIUsageLog.success == True, AIUsageLog.created_at >= now - timedelta(hours=24))
+        .group_by(hour_col)
+        .order_by(hour_col)
+    ).all()
+    hourly_trend = [
+        {
+            "hour": str(row.hour) if not settings.uses_sqlite else str(row.hour),
+            "calls": row.calls,
+            "total_tokens": int(row.total_tokens),
+        }
+        for row in hourly_rows
     ]
 
     # By source breakdown
@@ -1677,14 +1700,52 @@ def get_token_monitor_stats(db: Session) -> dict:
         (cumulative["prompt_tokens"] * 0.012 + cumulative["completion_tokens"] * 0.012) / 1000, 2
     )
 
+    # Monthly cost projection based on current 7-day average
+    week_stats = _period_stats(week_start)
+    daily_avg_tokens = week_stats["total_tokens"] / 7 if week_stats["calls"] > 0 else 0
+    daily_avg_cost = daily_avg_tokens * 0.012 / 1000
+    projected_monthly_cost_cny = round(daily_avg_cost * 30, 2)
+
+    # Token rate: tokens per hour (last 24h)
+    last_24h = _period_stats(now - timedelta(hours=24))
+    tokens_per_hour = round(last_24h["total_tokens"] / 24, 1) if last_24h["calls"] > 0 else 0
+
+    # Budget status
+    today_stats = _period_stats(today_start)
+    budget_status = {
+        "daily_budget": settings.ai_daily_token_budget,
+        "daily_used": today_stats["total_tokens"],
+        "daily_remaining": max(0, settings.ai_daily_token_budget - today_stats["total_tokens"]) if settings.ai_daily_token_budget > 0 else -1,
+        "hourly_budget": settings.ai_hourly_token_budget,
+        "hourly_used": last_24h["total_tokens"],
+        "hourly_remaining": -1,
+    }
+    if settings.ai_hourly_token_budget > 0:
+        current_hour_start = now.replace(minute=0, second=0, microsecond=0)
+        hourly_used = db.scalar(
+            select(func.coalesce(func.sum(AIUsageLog.total_tokens), 0)).where(
+                AIUsageLog.success == True, AIUsageLog.created_at >= current_hour_start
+            )
+        ) or 0
+        budget_status["hourly_used"] = int(hourly_used)
+        budget_status["hourly_remaining"] = max(0, settings.ai_hourly_token_budget - int(hourly_used))
+
+    # Optimization stats from ai_extractor in-memory counters
+    opt_stats = get_optimization_stats()
+
     return {
-        "today": _period_stats(today_start),
-        "week": _period_stats(week_start),
+        "today": today_stats,
+        "week": week_stats,
         "month": _period_stats(month_start),
         "cumulative": cumulative,
         "daily_trend": daily_trend,
+        "hourly_trend": hourly_trend,
         "by_source": by_source,
         "by_model": by_model,
         "recent_calls": recent_calls,
         "estimated_cost_cny": estimated_cost_cny,
+        "projected_monthly_cost_cny": projected_monthly_cost_cny,
+        "tokens_per_hour": tokens_per_hour,
+        "budget_status": budget_status,
+        "optimization": opt_stats,
     }

@@ -14,6 +14,14 @@ from app.normalization import ExtractedEventCandidate, extract_canonical_roles, 
 _extraction_cache: dict[str, list[ExtractedEventCandidate]] = {}
 _CACHE_MAX_SIZE = 500
 
+# Optimization counters (in-memory, reset on restart)
+_optimization_stats = {
+    "cache_hits": 0,
+    "smart_skips": 0,
+    "prefilter_chars_saved": 0,
+    "budget_rejections": 0,
+}
+
 
 ALLOWED_EVENT_TYPES = {
     "appointment",
@@ -27,9 +35,40 @@ ALLOWED_EVENT_TYPES = {
     "retirement",
 }
 
+# Regex patterns for body text pre-filtering — strips procedural/boilerplate content
+_PREFILTER_PATTERNS = [
+    re.compile(r"会议于.{5,30}召开.*?(?=。|$)", re.DOTALL),
+    re.compile(r"应到董事\d+人.*?出席董事\d+人", re.DOTALL),
+    re.compile(r"表决结果：.*?赞成\d+票.*?(?=。|$)", re.DOTALL),
+    re.compile(r"（\d+票同意.*?\d+票反对.*?\d+票弃权）", re.DOTALL),
+    re.compile(r"本次会议的召集.*?符合.*?公司法.*?章程.*?规定"),
+    re.compile(r"独立意见.{0,5}：.*?同意", re.DOTALL),
+    re.compile(r"特此公告\.?"),
+    re.compile(r"备查文件：.*", re.DOTALL),
+    re.compile(r"证券代码：\d{6}\s*证券简称：\S+\s*公告编号：\S+"),
+    re.compile(r"本公司及董事会全体成员保证信息披露的内容真实、准确、完整.*?重大遗漏", re.DOTALL),
+    re.compile(r"根据《.*?》.*?的有关规定", re.DOTALL),
+    re.compile(r"以上议案.*?审议通过", re.DOTALL),
+    re.compile(r"附件[:：].*", re.DOTALL),
+]
+
+# System prompt sent as separate message — cached by API provider, not re-processed each call
+_SYSTEM_PROMPT = """从A股公告提取高管/董事人事变动。仅提取正文明确的真实变动，忽略列席/委员会/担保/章程/利润分配等非人事项。
+角色:chairperson|ceo_equivalent|cfo_equivalent|board_secretary|senior_management|director|independent_director
+事件:appointment|resignation|removal|reelection|interim_assignment|title_change|nomination|non_renewal|retirement
+返JSON:{"events":[{"person_name":"名","role_raw":"原职","role_canonical":"角色","event_type":"事件","confidence":0.91,"evidence_excerpt":"原文"}]}"""
+
+# Short user template — only the variable content
+_USER_TEMPLATE = "标题：{title}\n正文：\n{body}"
+
 
 def ai_extraction_available() -> bool:
     return bool(settings.ai_extraction_enabled and settings.ai_api_base_url and settings.ai_api_key)
+
+
+def get_optimization_stats() -> dict:
+    """Return in-memory optimization counters for monitoring dashboard."""
+    return dict(_optimization_stats)
 
 
 def _record_ai_usage(
@@ -73,6 +112,58 @@ def _messages_url() -> str:
     return f"{base_url}/v1/messages"
 
 
+def _prefilter_body(text: str) -> str:
+    """Strip procedural/boilerplate content from announcement body to reduce AI input tokens."""
+    original_len = len(text)
+    for pattern in _PREFILTER_PATTERNS:
+        text = pattern.sub("", text)
+    # Collapse multiple blank lines into one
+    text = re.sub(r"\n{3,}", "\n\n", text).strip()
+    saved = original_len - len(text)
+    if saved > 0:
+        _optimization_stats["prefilter_chars_saved"] += saved
+    return text
+
+
+def _check_token_budget() -> bool:
+    """Check if current token usage is within daily/hourly budget. Returns True if OK to proceed."""
+    if settings.ai_daily_token_budget <= 0 and settings.ai_hourly_token_budget <= 0:
+        return True
+    try:
+        from datetime import timedelta
+        from sqlalchemy import func, select
+        from app.db import SessionLocal
+        from app.models import AIUsageLog
+        db = SessionLocal()
+        try:
+            now = __import__("datetime").datetime.utcnow()
+            if settings.ai_hourly_token_budget > 0:
+                hour_start = now.replace(minute=0, second=0, microsecond=0)
+                hourly_tokens = db.scalar(
+                    select(func.coalesce(func.sum(AIUsageLog.total_tokens), 0)).where(
+                        AIUsageLog.success == True, AIUsageLog.created_at >= hour_start
+                    )
+                ) or 0
+                if int(hourly_tokens) >= settings.ai_hourly_token_budget:
+                    _optimization_stats["budget_rejections"] += 1
+                    return False
+            if settings.ai_daily_token_budget > 0:
+                day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+                daily_tokens = db.scalar(
+                    select(func.coalesce(func.sum(AIUsageLog.total_tokens), 0)).where(
+                        AIUsageLog.success == True, AIUsageLog.created_at >= day_start
+                    )
+                ) or 0
+                if int(daily_tokens) >= settings.ai_daily_token_budget:
+                    _optimization_stats["budget_rejections"] += 1
+                    return False
+        finally:
+            db.close()
+    except Exception:
+        pass
+    return True
+
+
 def _extract_json_object(raw_text: str) -> dict[str, Any]:
     text = raw_text.strip()
     if text.startswith("```"):
@@ -88,7 +179,7 @@ def _extract_json_object(raw_text: str) -> dict[str, Any]:
 def _normalize_person_name(raw_name: Any) -> str | None:
     name = normalize_title_text(str(raw_name or ""))
     name = name.replace("先生", "").replace("女士", "").strip()
-    if re.fullmatch(r"[\u4e00-\u9fa5]{2,4}", name):
+    if re.fullmatch(r"[一-龥]{2,4}", name):
         return name
     name = re.sub(r"\s+", " ", name)
     if re.fullmatch(r"[A-Za-z][A-Za-z .'\-]{1,40}[A-Za-z]", name):
@@ -149,42 +240,41 @@ def _store_cache(content_hash: str, results: list[ExtractedEventCandidate]) -> N
     _extraction_cache[content_hash] = results
 
 
-def extract_events_with_ai(title: str, body_text: str, *, rule_confidence: float | None = None) -> list[ExtractedEventCandidate]:
-    """Extract events using AI. When rule_confidence >= 0.95, skip AI call to save tokens."""
+def extract_events_with_ai(title: str, body_text: str, *, rule_confidence: float | None = None, rule_candidate_count: int = 0) -> list[ExtractedEventCandidate]:
+    """Extract events using AI. Skips call when rule engine is confident enough or budget is exceeded."""
     if not ai_extraction_available():
         return []
 
     # Smart skip: if rule engine already has high confidence, skip AI call
-    if rule_confidence is not None and rule_confidence >= 0.95:
+    if rule_confidence is not None and rule_confidence >= 0.90:
+        _optimization_stats["smart_skips"] += 1
+        return []
+
+    # Fast path: single simple rule candidate with decent confidence — no need for AI confirmation
+    if rule_candidate_count == 1 and rule_confidence is not None and rule_confidence >= 0.88:
+        _optimization_stats["smart_skips"] += 1
+        return []
+
+    # Check token budget before making API call
+    if not _check_token_budget():
         return []
 
     normalized_title = normalize_title_text(title)
-    normalized_body = normalize_title_text(body_text)[: settings.ai_text_char_limit]
+    normalized_body = _prefilter_body(normalize_title_text(body_text))[: settings.ai_text_char_limit]
 
     # Check cache to avoid duplicate calls for same content
     cache_key = _content_hash(normalized_title, normalized_body)
     cached = _check_cache(cache_key)
     if cached is not None:
+        _optimization_stats["cache_hits"] += 1
         return cached
-
-    # Compressed prompt: same semantics, ~40% fewer input tokens
-    prompt = f"""从以下A股公告中提取高管/董事人事变动事件。仅提取正文明确写出的真实变动，忽略列席会议、委员会任职、担保/章程/利润分配等非人事事项。
-
-角色(role_canonical): chairperson|ceo_equivalent|cfo_equivalent|board_secretary|senior_management|director|independent_director
-事件(event_type): appointment|resignation|removal|reelection|interim_assignment|title_change|nomination|non_renewal|retirement
-
-严格返回JSON，不解释：
-{{"events":[{{"person_name":"张三","role_raw":"副总经理","role_canonical":"senior_management","event_type":"appointment","confidence":0.91,"evidence_excerpt":"聘任张三先生担任公司副总经理"}}]}}
-
-标题：{normalized_title}
-正文：
-{normalized_body}""".strip()
 
     payload = {
         "model": settings.ai_model_name,
         "max_tokens": 800,
         "temperature": 0,
-        "messages": [{"role": "user", "content": prompt}],
+        "system": _SYSTEM_PROMPT,
+        "messages": [{"role": "user", "content": _USER_TEMPLATE.format(title=normalized_title, body=normalized_body)}],
     }
     request = urllib.request.Request(
         _messages_url(),

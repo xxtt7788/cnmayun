@@ -6,7 +6,7 @@
 <div class="page-header">
     <div>
         <h1>Token 用量监控</h1>
-        <p>AI API 调用与 Token 消耗实时监控，含费用估算</p>
+        <p>AI API 调用与 Token 消耗实时监控，含费用估算与优化指标</p>
     </div>
 </div>
 
@@ -40,12 +40,12 @@
     <div class="metric-card">
         <span class="metric-card-label">估算费用</span>
         <span class="metric-card-value" style="color:var(--gold-600);">¥{{ token_stats.estimated_cost_cny }}</span>
-        <span class="metric-card-desc">基于 Moonshot 定价</span>
+        <span class="metric-card-desc">月度预估 ¥{{ token_stats.projected_monthly_cost_cny }}</span>
     </div>
     <div class="metric-card">
-        <span class="metric-card-label">平均 Token/调用</span>
-        <span class="metric-card-value">{{ token_stats.cumulative.avg_tokens_per_call }}</span>
-        <span class="metric-card-desc">全量平均</span>
+        <span class="metric-card-label">Token/小时</span>
+        <span class="metric-card-value">{{ token_stats.tokens_per_hour }}</span>
+        <span class="metric-card-desc">近 24 小时平均</span>
     </div>
     <div class="metric-card">
         <span class="metric-card-label">今日失败率</span>
@@ -55,6 +55,100 @@
         <span class="metric-card-desc">{{ token_stats.today.failures }} / {{ today_total }} 次</span>
     </div>
 </section>
+
+<!-- Budget Status -->
+{% if token_stats.budget_status.daily_budget > 0 or token_stats.budget_status.hourly_budget > 0 %}
+<section class="panel">
+    <div class="panel-head"><h2>Token 预算状态</h2></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;padding:16px;">
+        {% if token_stats.budget_status.daily_budget > 0 %}
+        {% set daily_pct = (token_stats.budget_status.daily_used / token_stats.budget_status.daily_budget * 100)|round(1) %}
+        <div>
+            <div style="margin-bottom:8px;">
+                <strong>日预算</strong>：{{ token_stats.budget_status.daily_used }} / {{ token_stats.budget_status.daily_budget }}
+                ({{ daily_pct }}%)
+            </div>
+            <div style="background:var(--border-300);border-radius:6px;height:12px;overflow:hidden;">
+                <div style="background:{% if daily_pct > 90 %}var(--warn-600){% elif daily_pct > 70 %}var(--gold-600){% else %}var(--good-600){% endif %};height:100%;width:{{ [daily_pct, 100]|min }}%;border-radius:6px;"></div>
+            </div>
+            <div style="margin-top:4px;color:var(--text-400);font-size:0.85em;">剩余 {{ token_stats.budget_status.daily_remaining }}</div>
+        </div>
+        {% endif %}
+        {% if token_stats.budget_status.hourly_budget > 0 %}
+        {% set hourly_pct = (token_stats.budget_status.hourly_used / token_stats.budget_status.hourly_budget * 100)|round(1) %}
+        <div>
+            <div style="margin-bottom:8px;">
+                <strong>时预算</strong>：{{ token_stats.budget_status.hourly_used }} / {{ token_stats.budget_status.hourly_budget }}
+                ({{ hourly_pct }}%)
+            </div>
+            <div style="background:var(--border-300);border-radius:6px;height:12px;overflow:hidden;">
+                <div style="background:{% if hourly_pct > 90 %}var(--warn-600){% elif hourly_pct > 70 %}var(--gold-600){% else %}var(--good-600){% endif %};height:100%;width:{{ [hourly_pct, 100]|min }}%;border-radius:6px;"></div>
+            </div>
+            <div style="margin-top:4px;color:var(--text-400);font-size:0.85em;">剩余 {{ token_stats.budget_status.hourly_remaining }}</div>
+        </div>
+        {% endif %}
+    </div>
+</section>
+{% endif %}
+
+<!-- Optimization Metrics -->
+<section class="panel">
+    <div class="panel-head"><h2>优化效果指标</h2></div>
+    <div class="metric-grid" style="grid-template-columns:repeat(4,1fr);">
+        <div class="metric-card">
+            <span class="metric-card-label">缓存命中</span>
+            <span class="metric-card-value">{{ token_stats.optimization.cache_hits }}</span>
+            <span class="metric-card-desc">避免重复 AI 调用</span>
+        </div>
+        <div class="metric-card">
+            <span class="metric-card-label">智能跳过</span>
+            <span class="metric-card-value">{{ token_stats.optimization.smart_skips }}</span>
+            <span class="metric-card-desc">规则置信度足够时跳过</span>
+        </div>
+        <div class="metric-card">
+            <span class="metric-card-label">预过滤节省</span>
+            <span class="metric-card-value">{{ token_stats.optimization.prefilter_chars_saved }}</span>
+            <span class="metric-card-desc">字符数（约折合 {{ (token_stats.optimization.prefilter_chars_saved / 2)|round(0)|int }} tokens）</span>
+        </div>
+        <div class="metric-card">
+            <span class="metric-card-label">预算拦截</span>
+            <span class="metric-card-value">{{ token_stats.optimization.budget_rejections }}</span>
+            <span class="metric-card-desc">超出预算被拒绝的调用</span>
+        </div>
+    </div>
+</section>
+
+<!-- Hourly Trend (24h) -->
+{% if token_stats.hourly_trend %}
+<section class="panel">
+    <div class="panel-head"><h2>小时 Token 用量（近 24 小时）</h2></div>
+    <div style="overflow-x:auto;">
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>时段</th>
+                <th>调用</th>
+                <th>Token</th>
+                <th>可视化</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% set hourly_max = token_stats.hourly_trend | map(attribute='total_tokens') | max %}
+            {% for item in token_stats.hourly_trend %}
+            <tr>
+                <td>{{ item.hour }}</td>
+                <td>{{ item.calls }}</td>
+                <td><strong>{{ item.total_tokens }}</strong></td>
+                <td>
+                    <div style="background:var(--accent-600);height:8px;border-radius:4px;width:{{ (item.total_tokens / hourly_max * 100)|int if hourly_max else 0 }}%;"></div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
+</section>
+{% endif %}
 
 <!-- Daily Trend -->
 <section class="panel">
@@ -201,11 +295,14 @@
 <section class="panel">
     <div class="panel-head"><h2>Token 优化策略（已实施）</h2></div>
     <div class="ops-notes">
-        <p><strong>1. Prompt 压缩</strong>：将 AI 提取 prompt 从冗长描述压缩为紧凑指令格式，减少约 40% input tokens。</p>
-        <p><strong>2. 智能跳过</strong>：当规则引擎置信度 >= 0.95 时，跳过 AI 调用，直接使用规则结果。典型命中率约 30-40%。</p>
-        <p><strong>3. 结果缓存</strong>：对相同公告内容（MD5 去重）缓存 AI 提取结果，避免重复处理同一公告。</p>
-        <p><strong>4. 输出上限</strong>：max_tokens 从 1200 降至 800，单次事件提取足够且减少 output tokens。</p>
-        <p><strong>5. 共识机制</strong>：规则与 AI 结果一致时置信度提升 +0.02，减少人工审核量，间接节省重试 token。</p>
+        <p><strong>1. System/User 消息分离</strong>：将 prompt 拆为 system 消息（指令）+ user 消息（内容），system 消息可被 API 提供方缓存，减少重复处理开销。</p>
+        <p><strong>2. Prompt 极致压缩</strong>：移除冗长示例和格式说明，仅保留最紧凑的指令与 schema 提示，input tokens 减少约 50%。</p>
+        <p><strong>3. 智能跳过（阈值 0.90）</strong>：规则引擎置信度 >= 0.90 时跳过 AI 调用；单候选且置信度 >= 0.88 也跳过。命中率提升至 40-55%。</p>
+        <p><strong>4. 文本预过滤</strong>：发送前剥离会议流程、表决情况、法律声明等程序性文本，有效输入减少 30-50%。</p>
+        <p><strong>5. 结果缓存</strong>：MD5 去重 + 500 条内存缓存，避免重复处理同一公告。</p>
+        <p><strong>6. Token 预算限制</strong>：支持日/小时 token 预算上限（AI_DAILY_TOKEN_BUDGET / AI_HOURLY_TOKEN_BUDGET），超限自动暂停 AI 调用。</p>
+        <p><strong>7. 输出上限</strong>：max_tokens = 800，单次提取足够且节省 output tokens。</p>
+        <p><strong>8. 共识机制</strong>：规则与 AI 一致时置信度 +0.02，减少人工审核和间接重试。</p>
     </div>
 </section>
 {% endblock %}
