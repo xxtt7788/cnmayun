@@ -351,20 +351,28 @@ def evaluate_notice_auto_review(title: str, body_text: str) -> AutoReviewDecisio
     simple_document = all(candidate.event_type in simple_event_types for candidate in merged_candidates)
     single_candidate = len(merged_candidates) == 1
     high_confidence = all(candidate.confidence >= settings.low_confidence_threshold for candidate in merged_candidates)
+    decent_confidence = all(candidate.confidence >= 0.85 for candidate in merged_candidates)
     high_support = bool(ai_candidates) and all(len(candidate.source_tags) >= 2 for candidate in merged_candidates)
     rule_only_high_confidence = bool(rule_candidates) and not ai_candidates and all(candidate.confidence >= 0.95 for candidate in merged_candidates)
+    rule_confident = bool(rule_candidates) and all(candidate.confidence >= 0.90 for candidate in merged_candidates)
     severe_risk_flags = set(risk_flags) - {"多人公告", "多角色公告"}
+    has_nomination_reelection = any(item.event_type in {"nomination", "reelection"} for item in merged_candidates)
+    rule_ai_disagree = "规则与AI不一致" in risk_flags
+    ai_only = "AI单独命中" in risk_flags
 
-    if simple_document and high_confidence and not severe_risk_flags and (high_support or rule_only_high_confidence):
-        return AutoReviewDecision(
-            decision="auto_publish",
-            candidates=merged_candidates,
-            reason="自动审核判定：直接发布。普通任免事件风险较低，且规则与AI结果一致或单事件规则命中极高置信。",
-            confidence=max(candidate.confidence for candidate in merged_candidates),
-            risk_flags=risk_flags,
-            rule_candidate_count=len(rule_candidates),
-            ai_candidate_count=len(ai_candidates),
-        )
+    # Auto-publish: broadly allow simple personnel changes with decent confidence
+    # Only block for: nomination/reelection, rule-AI disagreement, AI-only hits, severe risk
+    if simple_document and decent_confidence and not has_nomination_reelection and not rule_ai_disagree and not ai_only and not severe_risk_flags:
+        if high_confidence or rule_confident or high_support or rule_only_high_confidence or single_candidate:
+            return AutoReviewDecision(
+                decision="auto_publish",
+                candidates=merged_candidates,
+                reason="自动审核判定：直接发布。普通任免事件，规则引擎提取结果可靠。",
+                confidence=max(candidate.confidence for candidate in merged_candidates),
+                risk_flags=risk_flags,
+                rule_candidate_count=len(rule_candidates),
+                ai_candidate_count=len(ai_candidates),
+            )
 
     return AutoReviewDecision(
         decision="manual_review",
