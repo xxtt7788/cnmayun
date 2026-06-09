@@ -1,0 +1,12 @@
+[Unit]
+Description=Run China Succession zero snapshot repair every 6 hours
+
+[Timer]
+OnBootSec=10min
+OnUnitActiveSec=6h
+AccuracySec=5min
+Persistent=true
+Unit=china-succession-zero-repair.service
+
+[Install]
+WantedBy=timers.target

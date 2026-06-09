@@ -1,0 +1,24 @@
+[project]
+name = "china-succession"
+version = "0.1.0"
+description = "中国上市公司高管与董事变动追踪系统"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.116.0",
+    "itsdangerous>=2.2.0",
+    "jinja2>=3.1.0",
+    "psycopg[binary]>=3.2.0",
+    "pypdf>=5.4.0",
+    "pydantic>=2.11.0",
+    "python-multipart>=0.0.20",
+    "sqlalchemy>=2.0.0",
+    "uvicorn>=0.35.0",
+]
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["app"]

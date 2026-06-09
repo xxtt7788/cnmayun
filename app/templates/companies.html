@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block title %}公司库 | 高管人事动态{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>公司库</h1>
+        <p>按公司、交易所、基线状态筛选 A 股上市公司</p>
+    </div>
+</div>
+
+<!-- Filters -->
+<section class="panel">
+    <div class="panel-head"><h2>筛选条件</h2></div>
+    <form class="filter-form" method="get">
+        <label>
+            关键词
+            <input type="text" name="q" value="{{ filters.q }}" placeholder="公司名 / 简称 / 代码">
+        </label>
+        <label>
+            交易所
+            <select name="exchange">
+                <option value="">全部</option>
+                <option value="SSE" {% if filters.exchange == "SSE" %}selected{% endif %}>上交所</option>
+                <option value="SZSE" {% if filters.exchange == "SZSE" %}selected{% endif %}>深交所</option>
+                <option value="BSE" {% if filters.exchange == "BSE" %}selected{% endif %}>北交所</option>
+            </select>
+        </label>
+        <label>
+            基线状态
+            <select name="status">
+                <option value="">全部</option>
+                <option value="synced" {% if filters.status == "synced" %}selected{% endif %}>已同步</option>
+                <option value="pending" {% if filters.status == "pending" %}selected{% endif %}>待同步</option>
+                <option value="needs_retry" {% if filters.status == "needs_retry" %}selected{% endif %}>待重试</option>
+            </select>
+        </label>
+        <label>
+            每页数量
+            <select name="limit">
+                <option value="20" {% if filters.limit == 20 %}selected{% endif %}>20 家</option>
+                <option value="50" {% if filters.limit == 50 %}selected{% endif %}>50 家</option>
+                <option value="100" {% if filters.limit == 100 %}selected{% endif %}>100 家</option>
+            </select>
+        </label>
+        <button type="submit" class="btn btn-primary">筛选</button>
+    </form>
+</section>
+
+<!-- Results -->
+<section class="panel">
+    <div class="panel-head">
+        <h2>公司结果</h2>
+        <span class="panel-head-note">按发行人去重后的公司视图</span>
+    </div>
+    {% include "_pagination.html" %}
+    {% if result.items %}
+    <div class="company-list">
+        {% for item in result.items %}
+        <a class="company-link" href="/companies/{{ item.ticker }}">
+            <strong>{{ item.short_name or item.company_name }}</strong>
+            <span>{{ item.exchange }} {{ item.ticker }} · {{ item.industry_l1 or "行业待补充" }}</span>
+            <span>{{ item.market_segment or "板块待识别" }} · {{ item.baseline_status }} · 当前角色 {{ item.core_executive_count }}</span>
+        </a>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-state-icon">🏢</div>
+        <p>没有匹配到公司结果。</p>
+    </div>
+    {% endif %}
+    {% include "_pagination.html" %}
+</section>
+{% endblock %}

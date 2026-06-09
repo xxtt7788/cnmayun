@@ -1,0 +1,17 @@
+{% if pagination %}
+<div class="pagination-bar">
+    <div class="result-range">
+        {% if pagination.total %}
+        共 <strong>{{ pagination.total }}</strong> 条，当前第 <strong>{{ pagination.current_page }}</strong> / {{ pagination.total_pages }} 页
+        {% else %}
+        共 0 条
+        {% endif %}
+    </div>
+    <div class="pagination-actions">
+        <a class="page-link {% if not pagination.has_previous %}disabled{% endif %}" href="{{ pagination.first_url }}">首页</a>
+        <a class="page-link {% if not pagination.has_previous %}disabled{% endif %}" href="{{ pagination.previous_url }}">上一页</a>
+        <a class="page-link {% if not pagination.has_next %}disabled{% endif %}" href="{{ pagination.next_url }}">下一页</a>
+        <a class="page-link {% if not pagination.has_next %}disabled{% endif %}" href="{{ pagination.last_url }}">末页</a>
+    </div>
+</div>
+{% endif %}

@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block title %}项目记忆库 | 高管人事动态{% endblock %}
+
+{% block content %}
+<section class="detail-hero">
+    <span class="eyebrow">项目记忆库</span>
+    <h1>{{ memory.phase_one_product_name }}</h1>
+    <p class="lede">{{ memory.core_definition }}</p>
+    <div class="meta-row">
+        <span>版本 {{ memory.version }}</span>
+        <span>更新 {{ memory.updated_at }}</span>
+        <span>设计源 {{ memory.source_of_truth }}</span>
+    </div>
+</section>
+
+<section class="grid-2">
+    <div class="panel">
+        <div class="panel-head"><h2>核心工作流</h2></div>
+        <div class="company-list">
+            {% for item in memory.core_workflow %}
+            <div class="company-link">
+                <strong style="color:var(--accent-600);font-family:var(--font-mono);">0{{ loop.index }}</strong>
+                <span>{{ item }}</span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="panel">
+        <div class="panel-head"><h2>明确不做</h2></div>
+        <div class="company-list">
+            {% for item in memory.non_goals %}
+            <div class="company-link">
+                <strong style="color:var(--warn-600);">边界</strong>
+                <span>{{ item }}</span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</section>
+{% endblock %}

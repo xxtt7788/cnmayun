@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+
+{% block title %}关注列表 | 高管人事动态{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>关注列表</h1>
+        <p>管理你关注的公司、人物和角色，查看变动提醒</p>
+    </div>
+</div>
+
+<section class="grid-2">
+    <div class="panel">
+        <div class="panel-head"><h2>新增关注</h2></div>
+        <div class="panel-body">
+            <form class="watchlist-form" action="/watchlists/create" method="post">
+                <label>
+                    关注类型
+                    <select name="target_type">
+                        <option value="company">公司</option>
+                        <option value="person">人物</option>
+                        <option value="role">角色</option>
+                    </select>
+                </label>
+                <label>
+                    公司代码
+                    <input type="text" name="ticker" placeholder="公司关注时填写">
+                </label>
+                <label>
+                    人物 ID
+                    <input type="number" name="person_id" placeholder="人物关注时填写">
+                </label>
+                <label>
+                    角色
+                    <select name="role_canonical">
+                        <option value="">请选择</option>
+                        <option value="chairperson">董事长</option>
+                        <option value="ceo_equivalent">总经理/总裁</option>
+                        <option value="cfo_equivalent">财务负责人</option>
+                        <option value="director">董事</option>
+                        <option value="independent_director">独立董事</option>
+                    </select>
+                </label>
+                <label>
+                    备注
+                    <input type="text" name="notes" placeholder="例如：重点跟踪消费行业 CEO 变化">
+                </label>
+                <button type="submit" class="btn btn-primary">新增关注</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="panel">
+        <div class="panel-head"><h2>提醒流</h2></div>
+        {% if alerts %}
+        <div class="event-list">
+            {% for item in alerts %}
+            <article class="event-card">
+                <div class="event-topline">
+                    <span class="pill pill-status-{{ item.status }}">{{ item.status }}</span>
+                    <span class="pill pill-default">{{ item.watchlist_name }}</span>
+                </div>
+                <h3>{{ item.event.company_name }} · {{ item.event.role_canonical }} · {{ item.event.event_type }}</h3>
+                <p>{{ item.event.excerpt }}</p>
+                <div class="meta-row">
+                    <span>{{ item.created_at }}</span>
+                    <form class="inline-form" action="/alerts/{{ item.id }}/read" method="post">
+                        <button type="submit" class="btn btn-ghost btn-xs">标记已读</button>
+                    </form>
+                </div>
+            </article>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <div class="empty-state-icon">🔔</div>
+            <p>当前还没有提醒。先建立关注，然后同步公告事件。</p>
+        </div>
+        {% endif %}
+    </div>
+</section>
+
+<section class="panel">
+    <div class="panel-head"><h2>当前关注</h2></div>
+    {% if watchlists %}
+    <div class="company-list">
+        {% for item in watchlists %}
+        <div class="company-link">
+            <strong>{{ item.display_name }}</strong>
+            <span>{{ item.target_type }} · 提醒 {{ item.alert_count }} · 未读 {{ item.unread_alert_count }}</span>
+            <span>{{ item.notes or "无备注" }}</span>
+            <form class="inline-form" action="/watchlists/{{ item.id }}/delete" method="post" style="margin-top:8px;">
+                <button type="submit" class="btn btn-danger btn-xs">删除关注</button>
+            </form>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-state-icon">📌</div>
+        <p>当前还没有任何关注项。</p>
+    </div>
+    {% endif %}
+</section>
+{% endblock %}

@@ -1,0 +1,18 @@
+User-agent: GPTBot
+Disallow: /
+
+User-agent: MJ12bot
+Disallow: /
+
+User-agent: *
+Allow: /
+Disallow: /daily-events
+Disallow: /review
+Disallow: /coverage
+Disallow: /memory
+Disallow: /launch-readiness
+Disallow: /login
+Disallow: /api/
+Disallow: /exports/
+
+Sitemap: https://cnceo.org/sitemap.xml

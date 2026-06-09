@@ -1,0 +1,60 @@
+[2026-04-18T07:12:57.318333] remaining sync runner started batch_size=100 workers=12
+[2026-04-18T07:35:26.673180] run_id=15 requested=100 success=99 failed_batch=1 total_synced=1769 total_pending=3632 total_failed=551
+[2026-04-18T07:35:26.673180] note=300695: <urlopen error [WinError 10054] 远程主机强迫关闭了一个现有的连接。>
+[2026-04-18T07:43:25.160260] run_id=16 requested=100 success=100 failed_batch=0 total_synced=1869 total_pending=3532 total_failed=551
+[2026-04-18T07:54:34.646558] run_id=17 requested=100 success=100 failed_batch=0 total_synced=1969 total_pending=3432 total_failed=551
+[2026-04-18T08:13:00.190592] run_id=18 requested=100 success=100 failed_batch=0 total_synced=2069 total_pending=3332 total_failed=551
+[2026-04-18T08:19:23.764433] run_id=19 requested=100 success=100 failed_batch=0 total_synced=2169 total_pending=3232 total_failed=551
+[2026-04-18T08:26:51.009435] run_id=20 requested=100 success=100 failed_batch=0 total_synced=2269 total_pending=3132 total_failed=551
+[2026-04-18T08:34:34.527420] run_id=21 requested=100 success=100 failed_batch=0 total_synced=2369 total_pending=3032 total_failed=551
+[2026-04-18T08:45:58.777164] run_id=22 requested=100 success=47 failed_batch=53 total_synced=2416 total_pending=2932 total_failed=604
+[2026-04-18T08:45:58.777164] note=301618: <urlopen error [WinError 10054] 远程主机强迫关闭了一个现有的连接。>
+[2026-04-18T08:54:53.326837] run_id=23 requested=100 success=91 failed_batch=9 total_synced=2507 total_pending=2832 total_failed=613
+[2026-04-18T08:54:53.327837] note=600070: HTTP Error 500:
+[2026-04-18T09:03:24.168402] run_id=24 requested=100 success=93 failed_batch=7 total_synced=2600 total_pending=2732 total_failed=620
+[2026-04-18T09:03:24.170410] note=600139: HTTP Error 500:
+[2026-04-18T09:10:58.687403] run_id=25 requested=100 success=88 failed_batch=12 total_synced=2688 total_pending=2632 total_failed=632
+[2026-04-18T09:10:58.688405] note=600263: HTTP Error 500:
+[2026-04-18T09:18:47.094314] run_id=26 requested=100 success=96 failed_batch=4 total_synced=2784 total_pending=2532 total_failed=636
+[2026-04-18T09:18:47.094314] note=600393: HTTP Error 500:
+[2026-04-18T09:26:47.166736] run_id=27 requested=100 success=94 failed_batch=6 total_synced=2878 total_pending=2432 total_failed=642
+[2026-04-18T09:26:47.166736] note=600553: HTTP Error 500:
+[2026-04-18T09:33:57.283443] run_id=28 requested=100 success=87 failed_batch=13 total_synced=2965 total_pending=2332 total_failed=655
+[2026-04-18T09:33:57.285448] note=600631: HTTP Error 500:
+[2026-04-18T09:41:23.345648] run_id=29 requested=100 success=86 failed_batch=14 total_synced=3051 total_pending=2232 total_failed=669
+[2026-04-18T09:41:23.347647] note=600752: HTTP Error 500:
+[2026-04-18T09:49:34.645125] run_id=30 requested=100 success=94 failed_batch=6 total_synced=3145 total_pending=2132 total_failed=675
+[2026-04-18T09:49:34.647257] note=600849: HTTP Error 500:
+[2026-04-18T09:55:10.561889] run_id=31 requested=100 success=98 failed_batch=2 total_synced=3243 total_pending=2032 total_failed=677
+[2026-04-18T09:55:10.563890] note=600991: HTTP Error 500:
+[2026-04-18T10:03:01.240797] run_id=32 requested=100 success=96 failed_batch=4 total_synced=3339 total_pending=1932 total_failed=681
+[2026-04-18T10:03:01.241806] note=601313: HTTP Error 500:
+[2026-04-18T10:11:51.998790] run_id=33 requested=100 success=98 failed_batch=2 total_synced=3437 total_pending=1832 total_failed=683
+[2026-04-18T10:11:52.000800] note=601989: HTTP Error 500:
+[2026-04-18T10:18:23.713248] run_id=34 requested=100 success=100 failed_batch=0 total_synced=3537 total_pending=1732 total_failed=683
+[2026-04-18T10:24:33.065608] run_id=35 requested=100 success=100 failed_batch=0 total_synced=3637 total_pending=1632 total_failed=683
+[2026-04-18T10:32:15.715003] run_id=36 requested=100 success=99 failed_batch=1 total_synced=3736 total_pending=1532 total_failed=684
+[2026-04-18T10:32:15.717003] note=603388: HTTP Error 500:
+[2026-04-18T10:38:12.788639] run_id=37 requested=100 success=99 failed_batch=1 total_synced=3835 total_pending=1432 total_failed=685
+[2026-04-18T10:38:12.790649] note=603555: HTTP Error 500:
+[2026-04-18T10:44:58.078371] run_id=38 requested=100 success=100 failed_batch=0 total_synced=3935 total_pending=1332 total_failed=685
+[2026-04-18T10:50:44.678722] run_id=39 requested=100 success=99 failed_batch=1 total_synced=4034 total_pending=1232 total_failed=686
+[2026-04-18T10:50:44.678722] note=603963: HTTP Error 500:
+[2026-04-18T10:57:22.135106] run_id=40 requested=100 success=100 failed_batch=0 total_synced=4134 total_pending=1132 total_failed=686
+[2026-04-18T11:04:31.230641] run_id=41 requested=100 success=100 failed_batch=0 total_synced=4234 total_pending=1032 total_failed=686
+[2026-04-18T11:12:20.281347] run_id=42 requested=100 success=100 failed_batch=0 total_synced=4334 total_pending=932 total_failed=686
+[2026-04-18T11:20:40.965417] run_id=43 requested=100 success=100 failed_batch=0 total_synced=4434 total_pending=832 total_failed=686
+[2026-04-18T11:28:32.546106] run_id=44 requested=100 success=100 failed_batch=0 total_synced=4534 total_pending=732 total_failed=686
+[2026-04-18T11:37:10.368219] run_id=45 requested=100 success=100 failed_batch=0 total_synced=4634 total_pending=632 total_failed=686
+[2026-04-18T11:47:17.595611] run_id=46 requested=100 success=86 failed_batch=14 total_synced=4720 total_pending=532 total_failed=700
+[2026-04-18T11:47:17.597621] note=830799: HTTP Error 500:
+[2026-04-18T12:02:12.501256] run_id=47 requested=100 success=0 failed_batch=100 total_synced=4720 total_pending=432 total_failed=800
+[2026-04-18T12:02:12.503256] note=831195: HTTP Error 500:
+[2026-04-18T12:16:15.674502] run_id=48 requested=100 success=0 failed_batch=100 total_synced=4720 total_pending=332 total_failed=900
+[2026-04-18T12:16:15.676500] note=836239: HTTP Error 500:
+[2026-04-18T12:25:16.499710] run_id=49 requested=100 success=79 failed_batch=21 total_synced=4799 total_pending=232 total_failed=921
+[2026-04-18T12:25:16.501714] note=873339: HTTP Error 500:
+[2026-04-18T12:32:11.749177] run_id=50 requested=100 success=100 failed_batch=0 total_synced=4899 total_pending=132 total_failed=921
+[2026-04-18T12:39:44.078965] run_id=51 requested=100 success=100 failed_batch=0 total_synced=4999 total_pending=32 total_failed=921
+[2026-04-18T12:42:23.878339] run_id=52 requested=32 success=32 failed_batch=0 total_synced=5031 total_pending=0 total_failed=921
+[2026-04-18T12:42:26.927141] no pending companies left synced=5031 pending=0 failed=921

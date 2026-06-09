@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block title %}高管搜寻指南 | 高管人事动态{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>高管搜寻指南</h1>
+        <p>面向猎头顾问、董事会搜寻顾问和高端人才咨询团队的实战方法论。</p>
+    </div>
+    <a class="btn btn-primary btn-sm" href="/feed">查看最新人事动态</a>
+</div>
+
+<section class="article-grid">
+    {% for article in articles %}
+    <article class="article-card">
+        <span class="article-kicker">实战指南</span>
+        <h2><a href="/blog/{{ article.slug }}">{{ article.title }}</a></h2>
+        <p>{{ article.summary }}</p>
+        <a class="link-btn" href="/blog/{{ article.slug }}">阅读全文 →</a>
+    </article>
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-state-icon">文</div>
+        <p>暂无公开文章。</p>
+    </div>
+    {% endfor %}
+</section>
+
+<section class="panel cta-panel">
+    <div>
+        <h2>把文章里的方法直接落到数据里</h2>
+        <p>进入人事动态流，按角色、事件类型和公司代码筛选近期高管变动，并导出 CSV 候选名单。</p>
+    </div>
+    <div class="hero-actions">
+        <a class="btn btn-primary" href="/feed">进入人事动态</a>
+        <a class="btn btn-secondary" href="/companies">查看公司库</a>
+    </div>
+</section>
+{% endblock %}

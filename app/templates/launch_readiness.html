@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+
+{% block title %}上线准备度 | 高管人事动态{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>上线准备度</h1>
+        <p>先把能不能正式运营说清楚，再决定往外推多快</p>
+    </div>
+</div>
+
+<section class="metric-grid">
+    <div class="metric-card">
+        <span class="metric-card-label">原始公司全集</span>
+        <span class="metric-card-value">{{ readiness.raw_total_companies }}</span>
+    </div>
+    <div class="metric-card">
+        <span class="metric-card-label">已同步公司</span>
+        <span class="metric-card-value">{{ readiness.synced_companies }}</span>
+    </div>
+    <div class="metric-card">
+        <span class="metric-card-label">发行人去重后</span>
+        <span class="metric-card-value">{{ readiness.canonical_companies }}</span>
+    </div>
+    <div class="metric-card">
+        <span class="metric-card-label">当前状态</span>
+        <span class="metric-card-value" style="font-size:1.2rem;">{{ readiness.overall_status }}</span>
+    </div>
+</section>
+
+<section class="grid-2">
+    <div class="panel">
+        <div class="panel-head"><h2>关键指标</h2></div>
+        <table class="data-table">
+            <tbody>
+                <tr><th>去重后零快照公司</th><td>{{ readiness.canonical_zero_snapshot_companies }}</td></tr>
+                <tr><th>重复 org_id 组数</th><td>{{ readiness.duplicate_org_id_count }}</td></tr>
+                <tr><th>已发布事件</th><td>{{ readiness.published_event_count }}</td></tr>
+                <tr><th>待审核条目</th><td>{{ readiness.pending_review_count }}</td></tr>
+                <tr><th>后台登录保护</th><td>{% if readiness.auth_enabled %}<span style="color:var(--good-600);font-weight:600;">已启用</span>{% else %}<span style="color:var(--warn-600);font-weight:600;">未启用</span>{% endif %}</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="panel">
+        <div class="panel-head"><h2>已达标项</h2></div>
+        {% if readiness.ready_items %}
+        <div class="company-list">
+            {% for item in readiness.ready_items %}
+            <div class="company-link">
+                <strong style="color:var(--good-600);">✓ 已完成</strong>
+                <span>{{ item }}</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <div class="empty-state-icon">📋</div>
+            <p>当前还没有可标记为已达标的准备项。</p>
+        </div>
+        {% endif %}
+    </div>
+</section>
+
+<section class="panel">
+    <div class="panel-head"><h2>阻塞项</h2></div>
+    {% if readiness.blocking_issues %}
+    <div class="company-list">
+        {% for item in readiness.blocking_issues %}
+        <div class="company-link">
+            <strong style="color:var(--warn-600);">⚠ 待解决</strong>
+            <span>{{ item }}</span>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-state-icon">🚀</div>
+        <p>当前没有阻塞上线的关键问题，可以进入正式运营。</p>
+    </div>
+    {% endif %}
+</section>
+{% endblock %}

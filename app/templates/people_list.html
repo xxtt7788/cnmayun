@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{% block title %}人物库 | 高管人事动态{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>人物库</h1>
+        <p>按人物、角色、在任状态筛选上市公司高管与董事</p>
+    </div>
+</div>
+
+<!-- Filters -->
+<section class="panel">
+    <div class="panel-head"><h2>筛选条件</h2></div>
+    <form class="filter-form" method="get">
+        <label>
+            人名
+            <input type="text" name="q" value="{{ filters.q }}" placeholder="输入人物姓名">
+        </label>
+        <label>
+            角色
+            <select name="role">
+                <option value="">全部</option>
+                <option value="chairperson" {% if filters.role == "chairperson" %}selected{% endif %}>董事长</option>
+                <option value="ceo_equivalent" {% if filters.role == "ceo_equivalent" %}selected{% endif %}>总经理/总裁</option>
+                <option value="cfo_equivalent" {% if filters.role == "cfo_equivalent" %}selected{% endif %}>财务负责人</option>
+                <option value="director" {% if filters.role == "director" %}selected{% endif %}>董事</option>
+                <option value="independent_director" {% if filters.role == "independent_director" %}selected{% endif %}>独立董事</option>
+            </select>
+        </label>
+        <label class="checkbox-field">
+            <input type="hidden" name="active_only" value="false">
+            <input type="checkbox" name="active_only" value="true" {% if filters.active_only %}checked{% endif %}>
+            <span>仅看当前在任</span>
+        </label>
+        <label>
+            每页数量
+            <select name="limit">
+                <option value="20" {% if filters.limit == 20 %}selected{% endif %}>20 人</option>
+                <option value="50" {% if filters.limit == 50 %}selected{% endif %}>50 人</option>
+                <option value="100" {% if filters.limit == 100 %}selected{% endif %}>100 人</option>
+            </select>
+        </label>
+        <button type="submit" class="btn btn-primary">筛选</button>
+    </form>
+</section>
+
+<!-- Results -->
+<section class="panel">
+    <div class="panel-head">
+        <h2>人物结果</h2>
+        <span class="panel-head-note">优先展示当前在任与最新简历摘要</span>
+    </div>
+    {% include "_pagination.html" %}
+    {% if result.items %}
+    <div class="people-grid">
+        {% for item in result.items %}
+        <a class="person-card" href="/people/{{ item.id }}">
+            <div class="person-card-head">
+                <strong>{{ item.canonical_name }}</strong>
+                <span class="pill pill-default">{{ item.gender or "性别待补充" }}{% if item.birth_year %} · {{ item.birth_year }} 年生{% endif %}</span>
+            </div>
+            <span class="person-card-meta">{{ item.education or "学历待补充" }}</span>
+            <span class="person-card-meta">当前任职 {{ item.active_role_count }} 个角色 · {{ item.active_company_count }} 家公司</span>
+            <span class="person-card-meta">{{ "；".join(item.active_roles_summary) if item.active_roles_summary else "暂无在任摘要" }}</span>
+            {% if item.profile_intro %}
+            <p class="profile-snippet">{{ item.profile_intro }}</p>
+            {% endif %}
+        </a>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-state-icon">👤</div>
+        <p>没有匹配到人物结果。</p>
+    </div>
+    {% endif %}
+    {% include "_pagination.html" %}
+</section>
+{% endblock %}

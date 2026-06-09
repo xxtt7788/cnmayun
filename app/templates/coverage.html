@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+
+{% block title %}覆盖台账 | 高管人事动态{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>覆盖台账</h1>
+        <p>先把基线覆盖和任务状态看清楚，再谈事件流质量</p>
+    </div>
+</div>
+
+<section class="metric-grid">
+    <div class="metric-card">
+        <span class="metric-card-label">活跃公司</span>
+        <span class="metric-card-value">{{ coverage.active_companies }}</span>
+    </div>
+    <div class="metric-card">
+        <span class="metric-card-label">已同步</span>
+        <span class="metric-card-value">{{ coverage.synced_companies }}</span>
+    </div>
+    <div class="metric-card">
+        <span class="metric-card-label">覆盖率</span>
+        <span class="metric-card-value">{{ "%.1f"|format(coverage.coverage_rate * 100) }}%</span>
+    </div>
+    <div class="metric-card">
+        <span class="metric-card-label">人物数</span>
+        <span class="metric-card-value">{{ coverage.total_people }}</span>
+    </div>
+</section>
+
+<section class="grid-2">
+    <div class="panel">
+        <div class="panel-head"><h2>状态分布</h2></div>
+        <div class="metric-grid" style="padding:16px 20px 20px;">
+            {% for item in coverage.status_breakdown %}
+            <div class="metric-card">
+                <span class="metric-card-label">{{ item.label }}</span>
+                <span class="metric-card-value">{{ item.count }}</span>
+                <span class="metric-card-desc">{{ "%.1f"|format(item.ratio * 100) }}%</span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="panel">
+        <div class="panel-head"><h2>核心角色覆盖</h2></div>
+        <div class="metric-grid" style="padding:16px 20px 20px;">
+            {% for item in coverage.role_coverage %}
+            <div class="metric-card">
+                <span class="metric-card-label">{{ item.role_canonical }}</span>
+                <span class="metric-card-value">{{ item.company_count }}</span>
+                <span class="metric-card-desc">{{ "%.1f"|format(item.coverage_rate * 100) }}%</span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</section>
+
+<section class="grid-2">
+    <div class="panel">
+        <div class="panel-head"><h2>板块覆盖</h2></div>
+        <table class="data-table">
+            <thead>
+                <tr><th>板块</th><th>总数</th><th>已同步</th><th>覆盖率</th></tr>
+            </thead>
+            <tbody>
+                {% for item in coverage.segment_breakdown %}
+                <tr>
+                    <td><strong>{{ item.label }}</strong></td>
+                    <td>{{ item.total_count }}</td>
+                    <td>{{ item.synced_count }}</td>
+                    <td>{{ "%.1f"|format(item.coverage_rate * 100) }}%</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="panel">
+        <div class="panel-head"><h2>最近同步任务</h2></div>
+        {% if sync_jobs %}
+        <div class="company-list">
+            {% for job in sync_jobs %}
+            <div class="company-link">
+                <strong>{{ job.job_type }}</strong>
+                <span>{{ job.status }} · 请求 {{ job.requested_count }} · 成功 {{ job.success_count }} · 失败 {{ job.failed_count }}</span>
+                <span>{{ job.started_at }}{% if job.completed_at %} · 完成 {{ job.completed_at }}{% endif %}</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <div class="empty-state-icon">🔄</div>
+            <p>当前还没有公告同步任务记录。</p>
+        </div>
+        {% endif %}
+    </div>
+</section>
+
+<section class="panel">
+    <div class="panel-head"><h2>待重试公司</h2></div>
+    {% if coverage.pending_companies %}
+    <div class="company-list">
+        {% for item in coverage.pending_companies %}
+        <div class="company-link">
+            <strong>{{ item.short_name or item.company_name }}</strong>
+            <span>{{ item.exchange }} {{ item.ticker }} · {{ item.baseline_status }}</span>
+            <form class="inline-form" action="/review/retry-company/{{ item.ticker }}" method="post" style="margin-top:6px;">
+                <button type="submit" class="btn btn-secondary btn-xs">标记重试</button>
+            </form>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-state-icon">✅</div>
+        <p>当前没有待重试公司。</p>
+    </div>
+    {% endif %}
+</section>
+{% endblock %}

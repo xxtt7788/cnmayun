@@ -1,0 +1,11 @@
+[Unit]
+Description=Run China Succession PostgreSQL backup daily
+
+[Timer]
+OnCalendar=*-*-* 03:20:00
+AccuracySec=10min
+Persistent=true
+Unit=china-succession-backup.service
+
+[Install]
+WantedBy=timers.target

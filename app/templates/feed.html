@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+
+{% block title %}人事动态 | 高管人事动态{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>人事动态</h1>
+        <p>按角色、事件类型、公司代码筛选高管与董事变动事件</p>
+    </div>
+    <a class="btn btn-secondary btn-sm" href="/exports/events.csv?role={{ filters.role }}&event_type={{ filters.event_type }}&ticker={{ filters.ticker }}&include_review={{ 'true' if filters.include_review else 'false' }}">📥 导出 CSV</a>
+</div>
+
+<!-- Filters -->
+<section class="panel">
+    <div class="panel-head"><h2>筛选条件</h2></div>
+    <form class="filter-form" method="get">
+        <label>
+            关键词
+            <input type="text" name="q" value="{{ filters.q }}" placeholder="公司 / 人物 / 标题关键词">
+        </label>
+        <label>
+            角色
+            <select name="role">
+                <option value="">全部</option>
+                <option value="chairperson" {% if filters.role == "chairperson" %}selected{% endif %}>董事长</option>
+                <option value="ceo_equivalent" {% if filters.role == "ceo_equivalent" %}selected{% endif %}>总经理/总裁</option>
+                <option value="cfo_equivalent" {% if filters.role == "cfo_equivalent" %}selected{% endif %}>财务负责人</option>
+                <option value="director" {% if filters.role == "director" %}selected{% endif %}>董事</option>
+                <option value="independent_director" {% if filters.role == "independent_director" %}selected{% endif %}>独立董事</option>
+            </select>
+        </label>
+        <label>
+            事件类型
+            <select name="event_type">
+                <option value="">全部</option>
+                <option value="appointment" {% if filters.event_type == "appointment" %}selected{% endif %}>任命</option>
+                <option value="resignation" {% if filters.event_type == "resignation" %}selected{% endif %}>辞职</option>
+                <option value="removal" {% if filters.event_type == "removal" %}selected{% endif %}>免职</option>
+                <option value="reelection" {% if filters.event_type == "reelection" %}selected{% endif %}>换届连任</option>
+                <option value="nomination" {% if filters.event_type == "nomination" %}selected{% endif %}>提名</option>
+            </select>
+        </label>
+        <label>
+            公司代码
+            <input type="text" name="ticker" value="{{ filters.ticker }}" placeholder="如 600519">
+        </label>
+        <label class="checkbox-field">
+            <input type="checkbox" name="include_review" value="true" {% if filters.include_review %}checked{% endif %}>
+            <span>包含待审核事件</span>
+        </label>
+        <label>
+            每页数量
+            <select name="limit">
+                <option value="20" {% if filters.limit == 20 %}selected{% endif %}>20 条</option>
+                <option value="50" {% if filters.limit == 50 %}selected{% endif %}>50 条</option>
+                <option value="100" {% if filters.limit == 100 %}selected{% endif %}>100 条</option>
+            </select>
+        </label>
+        <button type="submit" class="btn btn-primary">筛选</button>
+    </form>
+</section>
+
+<!-- Results -->
+<section class="panel">
+    <div class="panel-head">
+        <h2>变动结果</h2>
+        <span class="panel-head-note">按公告日期倒序</span>
+    </div>
+    {% include "_pagination.html" %}
+    {% if feed.items %}
+    <div class="event-list">
+        {% for event in feed.items %}
+        <article class="event-card">
+            <div class="event-topline">
+                <a href="/companies/{{ event.company_ticker }}">{{ event.company_name }}</a>
+                <span class="pill pill-default">{{ event.role_canonical }}</span>
+                <span class="pill pill-{{ event.event_type }}">{{ event.event_type }}</span>
+                <span class="pill pill-status-{{ event.event_status }}">{{ event.event_status }}</span>
+            </div>
+            <h3>
+                {% if event.person_name and event.person_id %}
+                <a href="/people/{{ event.person_id }}">{{ event.person_name }}</a>
+                {% else %}
+                {{ event.person_name or "待补充人物" }}
+                {% endif %}
+            </h3>
+            <p>{{ event.excerpt }}</p>
+            <div class="meta-row">
+                <span>公告日期 {{ event.announcement_date or "暂无" }}</span>
+                <span>生效日期 {{ event.effective_date or "暂无" }}</span>
+                <span>置信度 {{ "%.2f"|format(event.confidence) }}</span>
+                <a href="{{ event.source_url }}" target="_blank" rel="noreferrer">查看来源 →</a>
+            </div>
+        </article>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-state-icon">🔍</div>
+        <p>没有匹配到变动事件。可以先回到首页运行公告同步。</p>
+    </div>
+    {% endif %}
+    {% include "_pagination.html" %}
+</section>
+{% endblock %}

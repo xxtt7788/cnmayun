@@ -1,0 +1,254 @@
+{% extends "base.html" %}
+
+{% block title %}访问统计 | 高管人事动态{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>访问统计</h1>
+        <p>基于匿名会话的真实用户访问数据（已自动过滤爬虫）</p>
+    </div>
+</div>
+
+<!-- Core Metrics -->
+<section class="metric-grid">
+    <div class="metric-card">
+        <span class="metric-card-label">实时在线</span>
+        <span class="metric-card-value">{{ stats.realtime_online }}</span>
+        <span class="metric-card-desc">近 5 分钟活跃访客</span>
+    </div>
+    <div class="metric-card">
+        <span class="metric-card-label">今日 PV</span>
+        <span class="metric-card-value">{{ stats.today_pv }}</span>
+        <span class="metric-card-desc">真实用户页面浏览</span>
+    </div>
+    <div class="metric-card">
+        <span class="metric-card-label">今日 UV</span>
+        <span class="metric-card-value">{{ stats.today_uv }}</span>
+        <span class="metric-card-desc">今日独立访客</span>
+    </div>
+    <div class="metric-card">
+        <span class="metric-card-label">新访客</span>
+        <span class="metric-card-value">{{ stats.new_visitors }}</span>
+        <span class="metric-card-desc">今日首次访问</span>
+    </div>
+    <div class="metric-card">
+        <span class="metric-card-label">回访客</span>
+        <span class="metric-card-value">{{ stats.returning_visitors }}</span>
+        <span class="metric-card-desc">之前有访问记录</span>
+    </div>
+    <div class="metric-card">
+        <span class="metric-card-label">平均访问深度</span>
+        <span class="metric-card-value">{{ stats.avg_depth }}</span>
+        <span class="metric-card-desc">每人平均浏览页数</span>
+    </div>
+    <div class="metric-card">
+        <span class="metric-card-label">跳出率</span>
+        <span class="metric-card-value">{{ stats.bounce_rate }}%</span>
+        <span class="metric-card-desc">只看 1 页就走的比例</span>
+    </div>
+    <div class="metric-card">
+        <span class="metric-card-label">总 PV（累计）</span>
+        <span class="metric-card-value">{{ stats.total_pv }}</span>
+        <span class="metric-card-desc">过滤爬虫后的总量</span>
+    </div>
+</section>
+
+<!-- AI Usage -->
+<section class="metric-grid">
+    <div class="metric-card">
+        <span class="metric-card-label">今日 AI 调用</span>
+        <span class="metric-card-value">{{ stats.ai_today_calls }}</span>
+        <span class="metric-card-desc">Kimi API 请求次数</span>
+    </div>
+    <div class="metric-card">
+        <span class="metric-card-label">今日 Token 用量</span>
+        <span class="metric-card-value">{{ stats.ai_today_tokens }}</span>
+        <span class="metric-card-desc">Input + Output tokens</span>
+    </div>
+    <div class="metric-card">
+        <span class="metric-card-label">AI 失败次数</span>
+        <span class="metric-card-value">{{ stats.ai_today_failures }}</span>
+        <span class="metric-card-desc">今日调用失败</span>
+    </div>
+    <div class="metric-card">
+        <span class="metric-card-label">AI 累计调用</span>
+        <span class="metric-card-value">{{ stats.ai_total_calls }}</span>
+        <span class="metric-card-desc">历史总成功次数</span>
+    </div>
+</section>
+
+<section class="grid-2">
+    <!-- Hourly Distribution -->
+    <div class="panel">
+        <div class="panel-head"><h2>今日时段分布</h2></div>
+        {% if stats.hourly %}
+        <table class="data-table">
+            <thead>
+                <tr><th>时段</th><th>PV</th><th>可视化</th></tr>
+            </thead>
+            <tbody>
+                {% set max_hour_pv = stats.hourly | map(attribute='pv') | max %}
+                {% for item in stats.hourly %}
+                <tr>
+                    <td>{{ "%02d"|format(item.hour) }}:00</td>
+                    <td>{{ item.pv }}</td>
+                    <td>
+                        <div style="background:var(--accent-600);height:8px;border-radius:4px;width:{{ (item.pv / max_hour_pv * 100)|int }}%;"></div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="empty-state">
+            <div class="empty-state-icon">📅</div>
+            <p>暂无时段数据。</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Browser Distribution -->
+    <div class="panel">
+        <div class="panel-head"><h2>浏览器分布</h2></div>
+        {% if stats.browser_dist %}
+        <table class="data-table">
+            <thead>
+                <tr><th>浏览器</th><th>PV</th><th>占比</th></tr>
+            </thead>
+            <tbody>
+                {% set total_browser_pv = stats.browser_dist | map(attribute='pv') | sum %}
+                {% for item in stats.browser_dist %}
+                <tr>
+                    <td>{{ item.name }}</td>
+                    <td>{{ item.pv }}</td>
+                    <td>{{ "%.1f"|format(item.pv / total_browser_pv * 100) }}%</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="empty-state">
+            <div class="empty-state-icon">🌐</div>
+            <p>暂无浏览器数据。</p>
+        </div>
+        {% endif %}
+    </div>
+</section>
+
+<section class="grid-2">
+    <!-- Top Pages -->
+    <div class="panel">
+        <div class="panel-head"><h2>热门页面</h2></div>
+        {% if stats.top_pages %}
+        <table class="data-table">
+            <thead>
+                <tr><th>页面</th><th>PV</th></tr>
+            </thead>
+            <tbody>
+                {% for item in stats.top_pages %}
+                <tr>
+                    <td><code>{{ item.path }}</code></td>
+                    <td>{{ item.pv }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="empty-state">
+            <div class="empty-state-icon">📊</div>
+            <p>暂无页面访问数据。</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Top Referrers -->
+    <div class="panel">
+        <div class="panel-head"><h2>来源</h2></div>
+        {% if stats.top_referrers %}
+        <table class="data-table">
+            <thead>
+                <tr><th>来源</th><th>次数</th></tr>
+            </thead>
+            <tbody>
+                {% for item in stats.top_referrers %}
+                <tr>
+                    <td style="max-width:360px;overflow:hidden;text-overflow:ellipsis;">{{ item.referrer }}</td>
+                    <td>{{ item.pv }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="empty-state">
+            <div class="empty-state-icon">🔗</div>
+            <p>暂无来源数据。</p>
+        </div>
+        {% endif %}
+    </div>
+</section>
+
+<section class="panel">
+    <div class="panel-head"><h2>每日趋势（近 14 天）</h2></div>
+    {% if stats.daily_trend %}
+    <table class="data-table">
+        <thead>
+            <tr><th>日期</th><th>PV</th><th>UV</th></tr>
+        </thead>
+        <tbody>
+            {% for item in stats.daily_trend %}
+            <tr>
+                <td>{{ item.day }}</td>
+                <td>{{ item.pv }}</td>
+                <td>{{ item.uv }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-state-icon">📅</div>
+        <p>暂无趋势数据。</p>
+    </div>
+    {% endif %}
+</section>
+
+<section class="panel">
+    <div class="panel-head"><h2>访客明细（最近 50 条，已过滤爬虫）</h2></div>
+    {% if stats.visitors %}
+    <div style="overflow-x:auto;">
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>时间</th>
+                <th>IP</th>
+                <th>页面</th>
+                <th>浏览器</th>
+                <th>User-Agent</th>
+                <th>来源</th>
+                <th>会话</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for v in stats.visitors %}
+            <tr>
+                <td>{{ v.time }}</td>
+                <td><code>{{ v.ip }}</code></td>
+                <td><code>{{ v.path }}</code></td>
+                <td>{{ v.browser }}</td>
+                <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;font-size:12px;color:var(--text-secondary);">{{ v.ua }}</td>
+                <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;font-size:12px;">{{ v.referrer }}</td>
+                <td><code>{{ v.session }}</code></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-state-icon">👤</div>
+        <p>暂无访客数据。</p>
+    </div>
+    {% endif %}
+</section>
+{% endblock %}

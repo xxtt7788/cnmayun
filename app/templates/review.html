@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+
+{% block title %}审核台 | 高管人事动态{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>审核台</h1>
+        <p>按公告聚合展示待审核队列，避免同一公告下多位候选人员重复刷屏</p>
+    </div>
+    <div style="display:flex;gap:8px;">
+        <span class="pill pill-default">待审公告 {{ pending_document_count }}</span>
+        <span class="pill pill-status-review_required">待审项 {{ pending_item_count }}</span>
+    </div>
+</div>
+
+<section class="grid-2 review-layout">
+    <div class="panel">
+        <div class="panel-head"><h2>待审核队列</h2></div>
+        {% if groups %}
+        <div class="event-list">
+            {% for group in groups %}
+            <article class="event-card">
+                <div class="event-topline">
+                    <span class="pill pill-default">公告级审核</span>
+                    <span class="pill pill-status-review_required">待审项 {{ group.review_count }}</span>
+                    <span class="pill pill-default">候选事件 {{ group.event_count }}</span>
+                    {% if group.document_review_count %}
+                    <span class="pill pill-status-new">文档线索 {{ group.document_review_count }}</span>
+                    {% endif %}
+                    {% if group.company_name %}
+                    <span class="pill pill-default">{{ group.company_name }}{% if group.company_ticker %} · {{ group.company_ticker }}{% endif %}</span>
+                    {% endif %}
+                </div>
+
+                <h3>{{ group.title }}</h3>
+
+                {% if group.source_url %}
+                <div class="meta-row">
+                    <a href="{{ group.source_url }}" target="_blank" rel="noreferrer">查看公告原文 →</a>
+                    <span>最新入队：{{ group.created_at_latest }}</span>
+                </div>
+                {% endif %}
+
+                {% if group.reasons %}
+                <div class="reason-block">
+                    <strong>系统判断原因</strong>
+                    {% for reason in group.reasons %}
+                    <p>{{ reason }}</p>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                {% if group.events %}
+                <div class="candidate-table-wrap">
+                    <table class="data-table candidate-table">
+                        <thead>
+                            <tr>
+                                <th>人员</th>
+                                <th>角色</th>
+                                <th>事件</th>
+                                <th>置信度</th>
+                                <th>证据句</th>
+                                <th>单项操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in group["items"] %}
+                            {% if item.event %}
+                            <tr>
+                                <td>{{ item.event.person_name or "未知人员" }}</td>
+                                <td>{{ item.event.role_canonical }}</td>
+                                <td>{{ item.event.event_type }}</td>
+                                <td>{{ "%.2f"|format(item.event.confidence) }}</td>
+                                <td class="evidence-cell">{{ item.event.excerpt or "无证据句" }}</td>
+                                <td>
+                                    <div class="compact-actions">
+                                        <form class="inline-form" action="/review/{{ item.id }}/approve" method="post">
+                                            <button type="submit" class="btn btn-primary btn-xs">通过</button>
+                                        </form>
+                                        <form class="inline-form" action="/review/{{ item.id }}/reject" method="post">
+                                            <button type="submit" class="btn btn-danger btn-xs">驳回</button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endif %}
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% elif group.source_document_excerpt %}
+                <p class="evidence">正文预览：{{ group.source_document_excerpt }}</p>
+                {% endif %}
+
+                {% if group.extraction_hints %}
+                <div class="review-hints">
+                    <strong style="font-size:0.85rem;color:var(--text-sec);">系统候选线索，人工主要核对这些字段：</strong>
+                    {% for hint in group.extraction_hints %}
+                    <div class="hint-card">
+                        <div class="meta-row">
+                            <span>人员：{{ hint.person_name or "未稳定提取" }}</span>
+                            <span>角色：{{ hint.role_canonical or hint.role_raw or "未稳定提取" }}</span>
+                            <span>事件：{{ hint.event_type or "未稳定提取" }}</span>
+                            <span>置信度：{{ "%.2f"|format(hint.confidence) }}</span>
+                        </div>
+                        {% if hint.missing_fields %}
+                        <p class="warning-note">缺失字段：{{ "、".join(hint.missing_fields) }}</p>
+                        {% endif %}
+                        <p class="evidence">证据句：{{ hint.excerpt }}</p>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                <div class="meta-row" style="padding-top:10px;border-top:1px dashed var(--border);">
+                    {% if group.source_document_id %}
+                    <form class="inline-form" action="/review/document/{{ group.source_document_id }}/approve" method="post">
+                        <button type="submit" class="btn btn-primary btn-sm">整篇公告通过</button>
+                    </form>
+                    <form class="inline-form" action="/review/document/{{ group.source_document_id }}/reject" method="post">
+                        <button type="submit" class="btn btn-danger btn-sm">整篇公告驳回</button>
+                    </form>
+                    <form class="inline-form" action="/review/document/{{ group.source_document_id }}/reprocess" method="post">
+                        <button type="submit" class="btn btn-secondary btn-sm">整篇重新抽取</button>
+                    </form>
+                    {% else %}
+                    {% for item in group["items"][:1] %}
+                    <form class="inline-form" action="/review/{{ item.id }}/reprocess" method="post">
+                        <button type="submit" class="btn btn-secondary btn-sm">重新抽取</button>
+                    </form>
+                    {% endfor %}
+                    {% endif %}
+                </div>
+            </article>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <div class="empty-state-icon">✅</div>
+            <p>当前没有待审核条目。</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="panel">
+        <div class="panel-head"><h2>最近公告任务</h2></div>
+        {% if sync_jobs %}
+        <div class="company-list">
+            {% for job in sync_jobs %}
+            <div class="company-link">
+                <strong>{{ job.job_type }}</strong>
+                <span>{{ job.status }} · 成功 {{ job.success_count }} · 失败 {{ job.failed_count }}</span>
+                <span>{{ job.started_at }}{% if job.completed_at %} · {{ job.completed_at }}{% endif %}</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <div class="empty-state-icon">📋</div>
+            <p>还没有公告任务记录。</p>
+        </div>
+        {% endif %}
+    </div>
+</section>
+{% endblock %}

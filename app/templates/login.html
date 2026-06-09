@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>登录 | 高管人事动态</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/styles.css') }}">
+</head>
+<body>
+    <main class="page-shell" style="min-height:80vh;place-content:center;">
+        <section class="panel auth-panel">
+            <div class="panel-head">
+                <h1 style="font-family:var(--font-serif);">后台登录</h1>
+            </div>
+            <div class="panel-body">
+                <p style="color:var(--text-sec);line-height:1.6;margin-bottom:20px;">正式运营环境建议开启后台密码保护。登录后才能访问系统页面、API 和导出接口。</p>
+                {% if error_message %}
+                <div class="hint-card" style="margin-bottom:16px;background:var(--warn-50);border-color:var(--warn-100);">
+                    <strong style="color:var(--warn-600);">⚠️ {{ error_message }}</strong>
+                </div>
+                {% endif %}
+                <form class="watchlist-form" method="post" action="/login">
+                    <input type="hidden" name="next_path" value="{{ next_path }}">
+                    <label>
+                        管理密码
+                        <input type="password" name="password" placeholder="请输入后台密码" required>
+                    </label>
+                    <button type="submit" class="btn btn-primary" style="width:100%;">登录</button>
+                </form>
+            </div>
+        </section>
+    </main>
+</body>
+</html>

@@ -1,0 +1,8 @@
+your-domain.example.com {
+	encode gzip
+
+	@health path /healthz /readyz
+	header @health Cache-Control "no-store"
+
+	reverse_proxy 127.0.0.1:8000
+}

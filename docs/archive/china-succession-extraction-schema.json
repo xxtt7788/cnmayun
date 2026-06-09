@@ -1,0 +1,214 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://china-succession.local/schemas/notice-extraction-v1.json",
+  "title": "China Succession Notice Extraction Contract",
+  "type": "object",
+  "required": [
+    "document_summary",
+    "classification",
+    "events"
+  ],
+  "properties": {
+    "document_summary": {
+      "type": "object",
+      "required": [
+        "source_document_id",
+        "title",
+        "is_management_relevant",
+        "notice_type_raw",
+        "notice_type_canonical"
+      ],
+      "properties": {
+        "source_document_id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "is_management_relevant": {
+          "type": "boolean"
+        },
+        "notice_type_raw": {
+          "type": "string"
+        },
+        "notice_type_canonical": {
+          "type": "string",
+          "enum": [
+            "appointment_notice",
+            "resignation_notice",
+            "board_resolution",
+            "shareholder_resolution",
+            "reelection_notice",
+            "annual_report",
+            "other"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "classification": {
+      "type": "object",
+      "required": [
+        "confidence",
+        "reasons"
+      ],
+      "properties": {
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "reasons": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/event"
+      }
+    }
+  },
+  "$defs": {
+    "event": {
+      "type": "object",
+      "required": [
+        "person_name_raw",
+        "role_raw",
+        "role_canonical",
+        "event_type",
+        "event_reason_raw",
+        "announcement_date",
+        "effective_date",
+        "confidence",
+        "evidence_excerpt"
+      ],
+      "properties": {
+        "person_name_raw": {
+          "type": "string"
+        },
+        "person_name_normalized": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "role_raw": {
+          "type": "string"
+        },
+        "role_canonical": {
+          "type": "string",
+          "enum": [
+            "chairperson",
+            "ceo_equivalent",
+            "cfo_equivalent",
+            "director",
+            "independent_director",
+            "unknown"
+          ]
+        },
+        "event_type": {
+          "type": "string",
+          "enum": [
+            "appointment",
+            "resignation",
+            "removal",
+            "reelection",
+            "interim_assignment",
+            "title_change",
+            "nomination",
+            "non_renewal",
+            "retirement",
+            "unknown"
+          ]
+        },
+        "event_status": {
+          "type": "string",
+          "enum": [
+            "confirmed",
+            "pending_shareholder_approval",
+            "pending_board_approval",
+            "uncertain"
+          ],
+          "default": "confirmed"
+        },
+        "event_reason_raw": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "announcement_date": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date"
+        },
+        "effective_date": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date"
+        },
+        "board_approval_date": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date"
+        },
+        "shareholder_approval_date": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date"
+        },
+        "continues_other_roles": {
+          "type": "boolean",
+          "default": false
+        },
+        "other_roles_retained_raw": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "predecessor_or_target_role_raw": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "evidence_excerpt": {
+          "type": "string"
+        },
+        "evidence_section": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "needs_manual_review": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

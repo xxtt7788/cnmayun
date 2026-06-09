@@ -1,0 +1,18 @@
+[Unit]
+Description=China Succession Web Service
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=china-succession
+Group=china-succession
+WorkingDirectory=/opt/china-succession
+EnvironmentFile=/etc/china-succession/china-succession.env
+ExecStart=/opt/china-succession/.venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

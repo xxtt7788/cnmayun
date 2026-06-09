@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <meta name="description" content="面向猎头顾问与董事会搜寻顾问的 A 股上市公司高管人事变动追踪工具。覆盖董事长、总经理、CFO、董事、独立董事等核心角色的任职变动，每日自动抓取公告并结构化。">
+    <meta property="og:title" content="高管人事动态 - A 股上市公司高管变动追踪">
+    <meta property="og:description" content="把 A 股公告变成可跟进的人物线索。覆盖 6100 家上市公司，自动抓取高管与董事变动公告。">
+    <meta property="og:url" content="https://cnceo.org">
+    <meta property="og:type" content="website">
+    <title>{% block title %}高管人事动态{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/styles.css') }}">
+</head>
+<body>
+    <header class="site-header">
+        <div class="header-inner">
+            <div class="brand">
+                <div class="brand-mark">高</div>
+                <div class="brand-text">
+                    <a href="/" class="brand-name">高管人事动态</a>
+                    <span class="brand-tag">A 股高管与董事变动情报系统</span>
+                </div>
+            </div>
+
+            <nav class="main-nav">
+                <a href="/" class="{% if request.url.path == '/' %}active{% endif %}">概览</a>
+                <a href="/feed" class="{% if request.url.path == '/feed' %}active{% endif %}">人事动态</a>
+                <a href="/companies" class="{% if request.url.path == '/companies' %}active{% endif %}">公司库</a>
+                <a href="/people" class="{% if request.url.path == '/people' %}active{% endif %}">人物库</a>
+                <a href="/blog" class="{% if request.url.path.startswith('/blog') %}active{% endif %}">指南</a>
+                <a href="/watchlists" class="{% if request.url.path == '/watchlists' %}active{% endif %}">关注</a>
+
+                {% if request.cookies.get("admin_auth") %}
+                <div class="nav-divider"></div>
+                <span class="admin-nav-label">运营</span>
+                <a href="/daily-events" class="{% if request.url.path == '/daily-events' %}active{% endif %}">新增记录</a>
+                <a href="/review" class="{% if request.url.path == '/review' %}active{% endif %}">审核</a>
+                <a href="/coverage" class="{% if request.url.path == '/coverage' %}active{% endif %}">覆盖台账</a>
+                <a href="/stats" class="{% if request.url.path == '/stats' %}active{% endif %}">统计</a>
+                {% endif %}
+            </nav>
+
+            <div class="header-actions">
+                {% if request.cookies.get("admin_auth") %}
+                <form class="inline-form" action="/logout" method="post">
+                    <button type="submit" class="btn-header">退出</button>
+                </form>
+                {% else %}
+                <a href="/login" class="btn-header">登录</a>
+                {% endif %}
+            </div>
+        </div>
+    </header>
+
+    <main class="page-shell">
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="site-footer">
+        <span>高管人事动态 · 面向猎头与董事会搜寻顾问</span>
+        <span>数据来源：巨潮资讯网公开披露信息</span>
+    </footer>
+</body>
+</html>

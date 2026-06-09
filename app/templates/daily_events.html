@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+
+{% block title %}新增记录 | 高管人事动态{% endblock %}
+
+{% block content %}
+<section class="detail-hero">
+    <span class="eyebrow">运营后台</span>
+    <h1>新增记录</h1>
+    <p class="lede">每天系统新增了哪些已发布事件，在这里看。客户前台看「人事动态」，管理员后台看「新增记录」和「审核」。两个世界分开，脑子清爽一点。</p>
+    <div class="meta-row">
+        <span>当前日期 <strong>{{ daily.selected_date }}</strong></span>
+        <span>{{ daily.events|length }} 条新增已发布事件</span>
+    </div>
+</section>
+
+<section class="ops-grid">
+    <aside class="panel ops-sidebar">
+        <div class="panel-head">
+            <h2>按天汇总</h2>
+            <span class="panel-head-note">点击日期查看明细</span>
+        </div>
+        {% if daily.daily_counts %}
+        <div class="daily-table-wrap">
+            <table class="data-table daily-table">
+                <thead>
+                    <tr><th>日期</th><th>新增</th><th>操作</th></tr>
+                </thead>
+                <tbody>
+                    {% for row in daily.daily_counts %}
+                    <tr class="{% if row.date == daily.selected_date_str %}selected-row{% endif %}">
+                        <td><strong>{{ row.date }}</strong></td>
+                        <td>{{ row.event_count }} 条</td>
+                        <td><a class="btn btn-ghost btn-xs" href="/daily-events?day={{ row.date }}#daily-event-list">查看</a></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <div class="empty-state-icon">📅</div>
+            <p>当前还没有已发布事件新增记录。</p>
+        </div>
+        {% endif %}
+    </aside>
+
+    <section class="panel" id="daily-event-list">
+        <div class="panel-head">
+            <div>
+                <h2>{{ daily.selected_date }} 新增事件</h2>
+                <span class="panel-head-note">按事件进入「已发布」状态的时间统计</span>
+            </div>
+            <a class="link-btn" href="/feed">进入客户前台人事动态 →</a>
+        </div>
+        {% if daily.events %}
+        <div class="event-list">
+            {% for row in daily.events %}
+            {% set event = row.event %}
+            <article class="event-card">
+                <div class="event-topline">
+                    <a href="/companies/{{ event.company_ticker }}">{{ event.company_name }}</a>
+                    <span class="pill pill-default">{{ event.role_canonical }}</span>
+                    <span class="pill pill-{{ event.event_type }}">{{ event.event_type }}</span>
+                </div>
+                <h3>
+                    {% if event.person_name and event.person_id %}
+                    <a href="/people/{{ event.person_id }}">{{ event.person_name }}</a>
+                    {% else %}
+                    {{ event.person_name or "待补充人物" }}
+                    {% endif %}
+                </h3>
+                <p>{{ event.excerpt }}</p>
+                <div class="meta-row">
+                    <span>发布时间 {{ row.added_at }}</span>
+                    <span>公告日期 {{ event.announcement_date or "暂无" }}</span>
+                    <span>生效日期 {{ event.effective_date or "暂无" }}</span>
+                    <span>置信度 {{ "%.2f"|format(event.confidence) }}</span>
+                    <a href="{{ event.source_url }}" target="_blank" rel="noreferrer">查看公告 →</a>
+                </div>
+                <p class="evidence">来源公告：{{ row.source_title }}</p>
+            </article>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <div class="empty-state-icon">📭</div>
+            <p>这一天没有新增已发布事件。</p>
+        </div>
+        {% endif %}
+    </section>
+</section>
+
+<section class="grid-2">
+    <div class="panel">
+        <div class="panel-head"><h2>同步策略</h2></div>
+        <div class="ops-notes">
+            <p><strong>{{ notice_sync_strategy.summary }}</strong></p>
+            <p>{{ notice_sync_strategy.window }}</p>
+            <p>{{ notice_sync_strategy.event_rule }}</p>
+        </div>
+    </div>
+
+    <div class="panel">
+        <div class="panel-head">
+            <h2>最近公告同步</h2>
+            <span class="panel-head-note">只展示运营含义，不展示数据库字段</span>
+        </div>
+        {% if sync_cards %}
+        <div class="sync-card-list">
+            {% for card in sync_cards %}
+            <article class="sync-card {% if card.needs_attention %}needs-attention{% endif %}">
+                <div class="sync-card-head">
+                    <strong>{{ card.title }}</strong>
+                    <span class="pill {% if card.needs_attention %}pill-status-review_required{% else %}pill-status-published{% endif %}">{{ card.status_label }}</span>
+                </div>
+                <p>{{ card.summary }}</p>
+                {% if card.failure_note %}
+                <p class="warning-note">{{ card.failure_note }}</p>
+                {% endif %}
+                <div class="meta-row">
+                    <span>开始 {{ card.started_at }}</span>
+                    {% if card.completed_at %}<span>完成 {{ card.completed_at }}</span>{% endif %}
+                </div>
+            </article>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <div class="empty-state-icon">🔄</div>
+            <p>还没有公告同步任务记录。</p>
+        </div>
+        {% endif %}
+    </div>
+</section>
+{% endblock %}

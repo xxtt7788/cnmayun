@@ -1,0 +1,156 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Round 2: 事件深化
+- R2.1 变更原因分类
+- R2.2 前任继任链
+- R2.3 高管变动率指标
+
+Author: Kimi Code CLI Agent
+Date: 2026-04-25
+"""
+import os
+import sys
+import logging
+
+ENV_PATH = "/etc/china-succession/china-succession.env"
+if os.path.exists(ENV_PATH):
+    with open(ENV_PATH, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                key, value = line.split("=", 1)
+                if key.startswith("export "):
+                    key = key[7:]
+                os.environ[key] = value.strip().strip('"').strip("'")
+
+sys.path.insert(0, "/opt/china-succession")
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logger = logging.getLogger(__name__)
+
+from sqlalchemy import create_engine, text
+from app.config import settings
+
+engine = create_engine(settings.database_url)
+
+REASON_KEYWORDS = [
+    ("personal", ["个人原因", "个人", "健康", "身体", "家庭", "亲属", "私事"]),
+    ("transfer", ["工作调动", "调任", "调动", "任免", "组织安排", "工作需要", "党委"]),
+    ("reappointment", ["换届", "选举", "任期届满", "届满", "改选", "提名"]),
+    ("retirement", ["退休", "年龄", "到龄", "离退"]),
+    ("compliance", ["违规", "违纪", "调查", "处罚", "立案", "审查", "辞职被查"]),
+    ("resignation", ["辞职", "辞任", "离职", "辞去"]),
+    ("appointment", ["聘任", "聘用", "任命", "当选", "委任"]),
+]
+
+
+def classify_reason(excerpt: str) -> str | None:
+    if not excerpt:
+        return None
+    excerpt = str(excerpt)
+    for category, keywords in REASON_KEYWORDS:
+        for kw in keywords:
+            if kw in excerpt:
+                return category
+    return None
+
+
+def r21_reason_category():
+    logger.info("START R2.1: Reason Category Classification")
+    with engine.connect() as conn:
+        rows = conn.execute(text("""
+            SELECT id, excerpt, event_type FROM events
+            WHERE reason_category IS NULL
+            ORDER BY id
+        """)).fetchall()
+
+    total = len(rows)
+    updated = 0
+    batch = []
+    for row in rows:
+        cat = classify_reason(row.excerpt)
+        if cat:
+            batch.append({"id": row.id, "cat": cat})
+        if len(batch) >= 500:
+            with engine.begin() as conn:
+                for item in batch:
+                    conn.execute(text("UPDATE events SET reason_category = :cat WHERE id = :id"), item)
+            updated += len(batch)
+            batch = []
+
+    if batch:
+        with engine.begin() as conn:
+            for item in batch:
+                conn.execute(text("UPDATE events SET reason_category = :cat WHERE id = :id"), item)
+        updated += len(batch)
+
+    logger.info(f"R2.1 DONE: total={total}, updated={updated}")
+
+
+def r22_event_chains():
+    logger.info("START R2.2: Event Chains (predecessor-successor)")
+    with engine.begin() as conn:
+        # For each company + role, find out-event followed by in-event
+        conn.execute(text("""
+            INSERT INTO event_chains (company_id, role, event_out_id, event_in_id, gap_days)
+            SELECT
+                e1.company_id,
+                e1.role_canonical,
+                e1.id AS event_out_id,
+                e2.id AS event_in_id,
+                EXTRACT(DAY FROM (e2.effective_date - e1.effective_date))::int AS gap_days
+            FROM events e1
+            JOIN events e2 ON e1.company_id = e2.company_id
+                AND e1.role_canonical = e2.role_canonical
+                AND e1.event_type = 'resignation'
+                AND e2.event_type = 'appointment'
+                AND e2.effective_date >= e1.effective_date
+                AND e2.effective_date <= e1.effective_date + INTERVAL '180 days'
+            WHERE NOT EXISTS (
+                SELECT 1 FROM event_chains ec
+                WHERE ec.company_id = e1.company_id
+                AND ec.role = e1.role_canonical
+                AND ec.event_out_id = e1.id
+            )
+            ORDER BY e1.company_id, e1.role_canonical, e1.effective_date
+        """))
+
+    with engine.connect() as conn:
+        count = conn.execute(text("SELECT COUNT(*) FROM event_chains")).scalar()
+    logger.info(f"R2.2 DONE: event_chains count={count}")
+
+
+def r23_turnover_rate():
+    logger.info("START R2.3: Executive Turnover Rate Metrics")
+    with engine.begin() as conn:
+        # Create or replace view for turnover rate per company per year
+        conn.execute(text("""
+            CREATE OR REPLACE VIEW company_turnover_rate AS
+            SELECT
+                company_id,
+                DATE_TRUNC('year', effective_date)::date AS year,
+                COUNT(*) FILTER (WHERE event_type = 'resignation') AS resignations,
+                COUNT(*) FILTER (WHERE event_type = 'appointment') AS appointments,
+                COUNT(DISTINCT person_id) AS distinct_persons
+            FROM events
+            WHERE effective_date IS NOT NULL
+            GROUP BY company_id, DATE_TRUNC('year', effective_date)
+        """))
+
+    with engine.connect() as conn:
+        count = conn.execute(text("SELECT COUNT(*) FROM company_turnover_rate")).scalar()
+    logger.info(f"R2.3 DONE: company_turnover_rate rows={count}")
+
+
+def main():
+    r21_reason_category()
+    r22_event_chains()
+    r23_turnover_rate()
+    logger.info("=" * 60)
+    logger.info("ROUND 2 COMPLETE")
+    logger.info("=" * 60)
+
+
+if __name__ == "__main__":
+    main()

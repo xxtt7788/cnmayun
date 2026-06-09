@@ -1,0 +1,11 @@
+[Unit]
+Description=China Succession PostgreSQL Backup
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=china-succession
+Group=china-succession
+EnvironmentFile=/etc/china-succession/china-succession.env
+ExecStart=/opt/china-succession/deploy/scripts/backup_postgres.sh

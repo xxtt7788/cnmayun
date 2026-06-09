@@ -1,0 +1,12 @@
+[Unit]
+Description=China Succession Notice Sync
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=china-succession
+Group=china-succession
+WorkingDirectory=/opt/china-succession
+EnvironmentFile=/etc/china-succession/china-succession.env
+ExecStart=/opt/china-succession/.venv/bin/python -m app.tasks sync-notices --days-back 3

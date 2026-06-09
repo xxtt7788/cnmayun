@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block title %}{{ article.title }} | 高管人事动态{% endblock %}
+
+{% block content %}
+<article class="article-shell">
+    <div class="article-hero">
+        <span class="article-kicker">高管搜寻指南</span>
+        <h1>{{ article.title }}</h1>
+        {% if article.summary %}
+        <p>{{ article.summary }}</p>
+        {% endif %}
+    </div>
+
+    <div class="article-content">
+        {{ article.html | safe }}
+    </div>
+</article>
+
+<section class="panel cta-panel">
+    <div>
+        <h2>用结构化数据追踪下一条高管变动</h2>
+        <p>高管人事动态每日抓取 A 股公告，提取董事长、总经理、CFO、董事和独立董事变动，支持筛选、关注和 CSV 导出。</p>
+    </div>
+    <div class="hero-actions">
+        <a class="btn btn-primary" href="/feed">查看最新变动</a>
+        <a class="btn btn-secondary" href="/blog">返回指南</a>
+    </div>
+</section>
+{% endblock %}

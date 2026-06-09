@@ -1,0 +1,271 @@
+{% extends "base.html" %}
+
+{% block title %}上市公司高管人事动态{% endblock %}
+
+{% block content %}
+<!-- Hero -->
+<section class="hero-section">
+    <div class="hero-main">
+        <span class="hero-eyebrow">高管人事动态</span>
+        <h1 class="hero-title">把 A 股公告变成可跟进的人物线索</h1>
+        <p class="hero-lede">面向猎头顾问、董事会搜寻顾问和高端人才咨询团队，持续监控上市公司董事长、总经理、财务负责人、董事和独立董事变动。</p>
+        <div class="hero-actions">
+            <a class="btn btn-primary" href="/feed">查看最新变动</a>
+            <a class="btn btn-secondary" href="/people">搜索候选人</a>
+            <a class="btn btn-secondary" href="/watchlists">建立关注</a>
+        </div>
+        <div class="hero-badges">
+            <span class="hero-badge">📊 覆盖 A 股全市场</span>
+            <span class="hero-badge">👤 人物任职轨迹</span>
+            <span class="hero-badge">🔗 公告来源可追溯</span>
+            <span class="hero-badge">📅 每日新增记录</span>
+        </div>
+    </div>
+    <div class="radar-card">
+        <div class="radar-header">
+            <span class="radar-label">已发布变动事件</span>
+        </div>
+        <div class="radar-number">{{ overview.total_events }}</div>
+        <span class="radar-sublabel">结构化高管与董事变动事件</span>
+        {% if overview.recent_events %}
+        {% set lead_event = overview.recent_events[0] %}
+        <div class="radar-latest">
+            <div class="radar-latest-label">最新线索</div>
+            <div class="radar-latest-item">
+                <strong>{{ lead_event.company_name }}</strong> · {{ lead_event.person_name or "待补充人物" }}<br>
+                {{ lead_event.role_canonical }} · {{ lead_event.event_type }}
+            </div>
+            <div style="margin-top:10px;">
+                <a class="link-btn" href="/feed">进入人事动态 →</a>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</section>
+
+<!-- Metrics -->
+<section class="metric-grid">
+    <div class="metric-card">
+        <span class="metric-card-label">上市公司</span>
+        <span class="metric-card-value">{{ overview.baseline.total_companies }}</span>
+        <span class="metric-card-desc">公司全集与发行人视图持续校准</span>
+    </div>
+    <div class="metric-card">
+        <span class="metric-card-label">人物库</span>
+        <span class="metric-card-value">{{ overview.total_people }}</span>
+        <span class="metric-card-desc">按人物聚合任职、教育和履历线索</span>
+    </div>
+    <div class="metric-card">
+        <span class="metric-card-label">领导层快照</span>
+        <span class="metric-card-value">{{ overview.baseline.current_snapshot_rows }}</span>
+        <span class="metric-card-desc">当前董事、高管和核心职务基线</span>
+    </div>
+    <div class="metric-card">
+        <span class="metric-card-label">今日新增</span>
+        <span class="metric-card-value">{{ overview.today_changes }}</span>
+        <span class="metric-card-desc">按公告日期统计的当日已发布变动</span>
+    </div>
+</section>
+
+<!-- Quick Search -->
+<section class="quick-search-panel">
+    <div class="quick-search-header">
+        <p style="font-size:0.82rem;font-weight:700;color:var(--text-sec);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">快速开始</p>
+        <h2>从一个人、一家公司或一个角色开始查</h2>
+    </div>
+    <div class="quick-search-grid">
+        <form class="quick-search-card" action="/people" method="get">
+            <strong>找候选人</strong>
+            <span>按姓名搜索人物，查看当前任职和历史轨迹</span>
+            <input type="text" name="q" placeholder="输入姓名，如 王亮">
+            <button type="submit">搜索人物</button>
+        </form>
+        <form class="quick-search-card" action="/companies" method="get">
+            <strong>看公司领导层</strong>
+            <span>按公司名或代码查看当前领导层快照和近期变动</span>
+            <input type="text" name="q" placeholder="输入公司或代码，如 600519">
+            <button type="submit">搜索公司</button>
+        </form>
+        <form class="quick-search-card" action="/feed" method="get">
+            <strong>筛选变动</strong>
+            <span>按角色和事件类型发现近期可跟进的人事变化</span>
+            <select name="role">
+                <option value="">全部角色</option>
+                <option value="chairperson">董事长</option>
+                <option value="ceo_equivalent">总经理/总裁</option>
+                <option value="cfo_equivalent">财务负责人</option>
+                <option value="director">董事</option>
+                <option value="independent_director">独立董事</option>
+            </select>
+            <button type="submit">进入人事动态</button>
+        </form>
+    </div>
+</section>
+
+<!-- Events + Rankings + Use Cases -->
+<section class="grid-2">
+    <div class="panel">
+        <div class="panel-head">
+            <div>
+                <h2>最新高管变动</h2>
+                <span class="panel-head-note">直接来自公告解析和审核后的结构化事件</span>
+            </div>
+            <a class="link-btn" href="/feed">全部查看 →</a>
+        </div>
+        {% if overview.recent_events %}
+        <div class="event-list">
+            {% for event in overview.recent_events %}
+            <article class="event-card">
+                <div class="event-topline">
+                    <a href="/companies/{{ event.company_ticker }}">{{ event.company_name }}</a>
+                    <span class="pill pill-default">{{ event.role_canonical }}</span>
+                    <span class="pill pill-{{ event.event_type }}">{{ event.event_type }}</span>
+                </div>
+                <h3>
+                    {% if event.person_name and event.person_id %}
+                    <a href="/people/{{ event.person_id }}">{{ event.person_name }}</a>
+                    {% else %}
+                    {{ event.person_name or "待补充人物" }}
+                    {% endif %}
+                </h3>
+                <p>{{ event.excerpt }}</p>
+                <div class="meta-row">
+                    <span>公告日期 {{ event.announcement_date or "暂无" }}</span>
+                    <span>置信度 {{ "%.2f"|format(event.confidence) }}</span>
+                    <a href="{{ event.source_url }}" target="_blank" rel="noreferrer">查看公告 →</a>
+                </div>
+            </article>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <div class="empty-state-icon">📭</div>
+            <p>当前还没有已发布事件。请先运行公告同步。</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="stack">
+        <div class="panel">
+            <div class="panel-head">
+                <h2>30 日变动热度</h2>
+                <a class="link-btn" href="/feed">看人事动态 →</a>
+            </div>
+            {% if rankings %}
+            <table class="data-table">
+                <thead>
+                    <tr><th>公司</th><th>代码</th><th>30 日</th><th>稳定度</th></tr>
+                </thead>
+                <tbody>
+                    {% for item in rankings %}
+                    <tr>
+                        <td><a href="/companies/{{ item.ticker }}">{{ item.company_name }}</a></td>
+                        <td>{{ item.ticker }}</td>
+                        <td>{{ item.change_count_30d }}</td>
+                        <td>{{ "%.1f"|format(item.stability_score or 0) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="empty-state">
+                <div class="empty-state-icon">📊</div>
+                <p>还没有足够事件沉淀出排行榜。</p>
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="panel">
+            <div class="panel-head"><h2>典型使用场景</h2></div>
+            <div class="use-case-list">
+                <div class="use-case-card">
+                    <strong>董事长或 CFO 离任后，快速发现机会窗口</strong>
+                    <span>按事件类型和角色筛选，形成可跟进公司名单</span>
+                </div>
+                <div class="use-case-card">
+                    <strong>查一个候选人的上市公司任职轨迹</strong>
+                    <span>人物详情页聚合当前任职、历史任职和近期公告</span>
+                </div>
+                <div class="use-case-card">
+                    <strong>持续盯住重点公司和关键岗位</strong>
+                    <span>把公司、人物、角色加入关注，后续变动进入提醒流</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Guides -->
+<section class="panel" style="margin-top:32px;">
+    <div class="panel-head">
+        <div>
+            <h2>高管搜寻指南</h2>
+            <span class="panel-head-note">把人事变动情报转成可执行的搜寻动作</span>
+        </div>
+        <a class="link-btn" href="/blog">全部指南 →</a>
+    </div>
+    <div class="article-grid">
+        <article class="article-card">
+            <span class="article-kicker">CFO / 董事长</span>
+            <h2><a href="/blog/article-01-track-cfo-chairperson">猎头如何高效追踪上市公司 CFO 和董事长变动</a></h2>
+            <p>从公告监控、角色筛选、人物履历到关注列表，建立一套可复制的高管变动发现流程。</p>
+            <a class="link-btn" href="/blog/article-01-track-cfo-chairperson">阅读全文 →</a>
+        </article>
+        <article class="article-card">
+            <span class="article-kicker">机会窗口</span>
+            <h2><a href="/blog/article-02-search-window">董事长离任后，搜寻窗口期有多长？</a></h2>
+            <p>拆解董事长、CFO、独立董事等不同变动类型背后的跟进节奏和 BD 时间窗口。</p>
+            <a class="link-btn" href="/blog/article-02-search-window">阅读全文 →</a>
+        </article>
+        <article class="article-card">
+            <span class="article-kicker">使用方法</span>
+            <h2><a href="/blog/article-03-guide">从公告到候选名单的完整工作流</a></h2>
+            <p>用人事动态流、人物库、公司库、关注列表和 CSV 导出完成一条实战搜寻链路。</p>
+            <a class="link-btn" href="/blog/article-03-guide">阅读全文 →</a>
+        </article>
+    </div>
+</section>
+
+<!-- CTA -->
+<section class="hero-section" style="margin-top:32px;">
+    <div class="hero-main" style="text-align:center;">
+        <h2 class="hero-title" style="font-size:1.6rem;">种子用户免费试用中</h2>
+        <p class="hero-lede" style="max-width:560px;margin-left:auto;margin-right:auto;">面向猎头顾问和董事会搜寻顾问开放。覆盖 A 股 6100 家公司，每日自动抓取高管与董事变动公告。</p>
+        <div class="hero-actions" style="justify-content:center;">
+            <a class="btn btn-primary" href="/feed">立即试用</a>
+        </div>
+        <div class="hero-badges" style="justify-content:center;">
+            <span class="hero-badge">✅ 免费试用</span>
+            <span class="hero-badge">✅ 无需信用卡</span>
+            <span class="hero-badge">✅ 随时导出 CSV</span>
+        </div>
+    </div>
+</section>
+
+<!-- FAQ -->
+<section class="panel" style="margin-top:32px;">
+    <div class="panel-head"><h2>常见问题</h2></div>
+    <div class="company-list">
+        <div class="company-link">
+            <strong>数据来源是什么？</strong>
+            <span>巨潮资讯网（cninfo.com.cn）公开披露的上市公司公告。每日自动抓取、解析和结构化。</span>
+        </div>
+        <div class="company-link">
+            <strong>数据更新频率？</strong>
+            <span>公告抓取每日运行，新事件经过人工审核后发布。通常 T+1 天内可看到前一日的新变动。</span>
+        </div>
+        <div class="company-link">
+            <strong>目前收费吗？</strong>
+            <span>种子用户阶段免费试用。后续会推出订阅制，价格远低于 Wind/Choice 等金融终端。</span>
+        </div>
+        <div class="company-link">
+            <strong>能导出数据吗？</strong>
+            <span>支持 CSV 导出，方便导入您自己的 CRM 或名单管理系统。</span>
+        </div>
+        <div class="company-link">
+            <strong>覆盖北交所吗？</strong>
+            <span>覆盖。已完成北交所旧代码（430/830/870）到新代码（920）的映射。</span>
+        </div>
+    </div>
+</section>
+{% endblock %}

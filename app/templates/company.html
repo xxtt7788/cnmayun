@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+
+{% block title %}{{ company.short_name or company.company_name }} | 高管人事动态{% endblock %}
+
+{% block content %}
+<!-- Hero -->
+<section class="detail-hero">
+    <span class="eyebrow">公司详情</span>
+    <h1>{{ company.short_name or company.company_name }}</h1>
+    <div class="meta-row">
+        <span>{{ company.exchange }} {{ company.ticker }}</span>
+        <span>{{ company.industry_l1 or "行业待补充" }}</span>
+        <span>基线状态 {{ company.baseline_status }}</span>
+        <span>最近同步 {{ company.baseline_last_synced_at or "暂无" }}</span>
+    </div>
+    <form class="inline-form" action="/watchlists/create" method="post">
+        <input type="hidden" name="target_type" value="company">
+        <input type="hidden" name="ticker" value="{{ company.ticker }}">
+        <button type="submit" class="btn btn-primary btn-sm">➕ 关注这家公司</button>
+    </form>
+</section>
+
+<!-- Grid -->
+<section class="grid-2">
+    <div class="panel">
+        <div class="panel-head">
+            <h2>当前领导层快照 {{ company.current_executives|length }}</h2>
+            <span class="panel-head-note">来自最新高管基线</span>
+        </div>
+        {% if company.current_executives %}
+        <div class="company-list">
+            {% for item in company.current_executives %}
+            <div class="company-link">
+                <strong>
+                    {% if item.person_id %}
+                    <a href="/people/{{ item.person_id }}">{{ item.person_name }}</a>
+                    {% else %}
+                    {{ item.person_name }}
+                    {% endif %}
+                </strong>
+                <span>{{ item.role_canonical }} · {{ item.title_raw }}</span>
+                <span>{{ item.gender or "性别未知" }} · {{ item.birth_year or "出生年未知" }} · {{ item.education or "学历待补充" }}</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <div class="empty-state-icon">👥</div>
+            <p>这家公司还没有当前高管快照。</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="stack">
+        <div class="panel">
+            <div class="panel-head"><h2>公司要点</h2></div>
+            <table class="data-table">
+                <tbody>
+                    <tr><th>组织机构代码</th><td>{{ company.org_id or "暂无" }}</td></tr>
+                    <tr><th>法定代表人</th><td>{{ company.legal_representative or "暂无" }}</td></tr>
+                    <tr><th>总经理</th><td>{{ company.general_manager_name or "暂无" }}</td></tr>
+                    <tr><th>上市日期</th><td>{{ company.listed_date or "暂无" }}</td></tr>
+                    <tr><th>官网</th><td>{% if company.website %}<a class="link-btn" href="{{ company.website }}" target="_blank" rel="noreferrer">{{ company.website }}</a>{% else %}暂无{% endif %}</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="panel">
+            <div class="panel-head"><h2>活跃任职区间 {{ company.active_tenures|length }}</h2></div>
+            {% if company.active_tenures %}
+            <div class="company-list">
+                {% for tenure in company.active_tenures %}
+                <div class="company-link">
+                    <strong>{{ tenure.person_name }}</strong>
+                    <span>{{ tenure.role_canonical }} · 起始 {{ tenure.start_date or "待回填" }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="empty-state">
+                <div class="empty-state-icon">📋</div>
+                <p>当前还没有可展示的任职区间。</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</section>
+
+<!-- Events -->
+<section class="panel">
+    <div class="panel-head">
+        <h2>近期变动 {{ company.recent_events|length }}</h2>
+        <a class="link-btn" href="/feed?ticker={{ company.current_ticker or company.ticker }}">查看全部变动 →</a>
+    </div>
+    {% if company.recent_events %}
+    <div class="event-list">
+        {% for event in company.recent_events %}
+        <article class="event-card">
+            <div class="event-topline">
+                <span class="pill pill-default">{{ event.role_canonical }}</span>
+                <span class="pill pill-{{ event.event_type }}">{{ event.event_type }}</span>
+                <span class="pill pill-status-{{ event.event_status }}">{{ event.event_status }}</span>
+            </div>
+            <h3>{{ event.person_name or "待补充人物" }}</h3>
+            <p>{{ event.excerpt }}</p>
+            <div class="meta-row">
+                <span>公告日期 {{ event.announcement_date or "暂无" }}</span>
+                <span>置信度 {{ "%.2f"|format(event.confidence) }}</span>
+                <a href="{{ event.source_url }}" target="_blank" rel="noreferrer">查看来源 →</a>
+            </div>
+        </article>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-state-icon">📭</div>
+        <p>这家公司还没有沉淀出可展示的变动事件。</p>
+    </div>
+    {% endif %}
+</section>
+{% endblock %}
