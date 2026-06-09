@@ -94,7 +94,7 @@
 <!-- Optimization Metrics -->
 <section class="panel">
     <div class="panel-head"><h2>优化效果指标</h2></div>
-    <div class="metric-grid" style="grid-template-columns:repeat(4,1fr);">
+    <div class="metric-grid" style="grid-template-columns:repeat(3,1fr);">
         <div class="metric-card">
             <span class="metric-card-label">缓存命中</span>
             <span class="metric-card-value">{{ token_stats.optimization.cache_hits }}</span>
@@ -106,9 +106,19 @@
             <span class="metric-card-desc">规则置信度足够时跳过</span>
         </div>
         <div class="metric-card">
+            <span class="metric-card-label">无信号跳过</span>
+            <span class="metric-card-value">{{ token_stats.optimization.no_signal_skips }}</span>
+            <span class="metric-card-desc">正文无人事变动信号直接跳过</span>
+        </div>
+        <div class="metric-card">
+            <span class="metric-card-label">段落提取节省</span>
+            <span class="metric-card-value">{{ token_stats.optimization.paragraph_extraction_savings }}</span>
+            <span class="metric-card-desc">字符数（约 {{ (token_stats.optimization.paragraph_extraction_savings / 2)|round(0)|int }} tokens）</span>
+        </div>
+        <div class="metric-card">
             <span class="metric-card-label">预过滤节省</span>
             <span class="metric-card-value">{{ token_stats.optimization.prefilter_chars_saved }}</span>
-            <span class="metric-card-desc">字符数（约折合 {{ (token_stats.optimization.prefilter_chars_saved / 2)|round(0)|int }} tokens）</span>
+            <span class="metric-card-desc">字符数（约 {{ (token_stats.optimization.prefilter_chars_saved / 2)|round(0)|int }} tokens）</span>
         </div>
         <div class="metric-card">
             <span class="metric-card-label">预算拦截</span>
@@ -295,14 +305,18 @@
 <section class="panel">
     <div class="panel-head"><h2>Token 优化策略（已实施）</h2></div>
     <div class="ops-notes">
-        <p><strong>1. System/User 消息分离</strong>：将 prompt 拆为 system 消息（指令）+ user 消息（内容），system 消息可被 API 提供方缓存，减少重复处理开销。</p>
-        <p><strong>2. Prompt 极致压缩</strong>：移除冗长示例和格式说明，仅保留最紧凑的指令与 schema 提示，input tokens 减少约 50%。</p>
-        <p><strong>3. 智能跳过（阈值 0.90）</strong>：规则引擎置信度 >= 0.90 时跳过 AI 调用；单候选且置信度 >= 0.88 也跳过。命中率提升至 40-55%。</p>
-        <p><strong>4. 文本预过滤</strong>：发送前剥离会议流程、表决情况、法律声明等程序性文本，有效输入减少 30-50%。</p>
-        <p><strong>5. 结果缓存</strong>：MD5 去重 + 500 条内存缓存，避免重复处理同一公告。</p>
-        <p><strong>6. Token 预算限制</strong>：支持日/小时 token 预算上限（AI_DAILY_TOKEN_BUDGET / AI_HOURLY_TOKEN_BUDGET），超限自动暂停 AI 调用。</p>
-        <p><strong>7. 输出上限</strong>：max_tokens = 800，单次提取足够且节省 output tokens。</p>
-        <p><strong>8. 共识机制</strong>：规则与 AI 一致时置信度 +0.02，减少人工审核和间接重试。</p>
+        <p><strong>1. 无信号跳过</strong>：标题无人事关键词且正文无管理动议信号时，直接跳过 AI 调用。消除约 44% 的空返回调用。</p>
+        <p><strong>2. 智能跳过（阈值 0.90）</strong>：规则引擎置信度 >= 0.90 时跳过；单候选且 >= 0.88 也跳过。命中率约 40-55%。</p>
+        <p><strong>3. 段落级提取</strong>：只发送含人事关键词的段落及其上下文段落，长公告可减少 60-80% 输入。</p>
+        <p><strong>4. 文本预过滤</strong>：剥离会议流程、表决情况、法律声明等程序性文本，减少 30-50%。</p>
+        <p><strong>5. System/User 消息分离</strong>：prompt 拆为 system（可被 API 缓存）+ user（仅内容），减少重复处理。</p>
+        <p><strong>6. Prompt 极致压缩</strong>：移除冗余字段和示例，system prompt 压至 ~120 tokens。</p>
+        <p><strong>7. max_tokens=256</strong>：实际平均 output 仅 144 tokens，800 远超需求，降至 256 节省 output。</p>
+        <p><strong>8. ai_text_char_limit=6000</strong>：从 12000 降至 6000，覆盖 95% 公告，input 减半。</p>
+        <p><strong>9. Token 预算限制</strong>：支持日/小时预算上限，超限自动暂停 AI 调用。</p>
+        <p><strong>10. 429 退避 + 403 冷却</strong>：429 指数退避重试，403 冷却 1 小时，消除无效重试。</p>
+        <p><strong>11. 结果缓存</strong>：MD5 去重 + 500 条内存缓存，避免重复处理。</p>
+        <p><strong>12. 固定置信度</strong>：AI 返回的 confidence 不可靠，改用固定 0.86，减少 output 字段。</p>
     </div>
 </section>
 {% endblock %}

@@ -58,7 +58,7 @@ class Settings:
     ai_api_key: str = os.getenv("AI_API_KEY", "")
     ai_model_name: str = os.getenv("AI_MODEL_NAME", "moonshot-v1-8k")
     ai_request_timeout: int = _env_int("AI_REQUEST_TIMEOUT", 60)
-    ai_text_char_limit: int = _env_int("AI_TEXT_CHAR_LIMIT", 12000)
+    ai_text_char_limit: int = _env_int("AI_TEXT_CHAR_LIMIT", 6000)
     ai_daily_token_budget: int = _env_int("AI_DAILY_TOKEN_BUDGET", 0)
     ai_hourly_token_budget: int = _env_int("AI_HOURLY_TOKEN_BUDGET", 0)
 

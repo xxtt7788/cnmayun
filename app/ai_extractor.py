@@ -3,12 +3,21 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import time
 import urllib.error
 import urllib.request
 from typing import Any
 
 from app.config import settings
-from app.normalization import ExtractedEventCandidate, extract_canonical_roles, infer_event_type_from_title, normalize_title_text
+from app.normalization import (
+    ExtractedEventCandidate,
+    body_has_management_motion,
+    extract_canonical_roles,
+    extract_events_from_text,
+    extract_person_name_from_title,
+    infer_event_type_from_title,
+    normalize_title_text,
+)
 
 # In-memory cache: content_hash -> extraction results, avoids duplicate AI calls
 _extraction_cache: dict[str, list[ExtractedEventCandidate]] = {}
@@ -20,8 +29,12 @@ _optimization_stats = {
     "smart_skips": 0,
     "prefilter_chars_saved": 0,
     "budget_rejections": 0,
+    "no_signal_skips": 0,
+    "paragraph_extraction_savings": 0,
 }
 
+# 403/429 cooldown: temporarily disable AI when API errors spike
+_api_cooldown_until: float = 0.0
 
 ALLOWED_EVENT_TYPES = {
     "appointment",
@@ -52,17 +65,21 @@ _PREFILTER_PATTERNS = [
     re.compile(r"附件[:：].*", re.DOTALL),
 ]
 
-# System prompt sent as separate message — cached by API provider, not re-processed each call
-_SYSTEM_PROMPT = """从A股公告提取高管/董事人事变动。仅提取正文明确的真实变动，忽略列席/委员会/担保/章程/利润分配等非人事项。
+# Personnel keywords for paragraph extraction
+_PERSONNEL_KEYWORDS = re.compile(r"聘任|任命|选举|选聘|当选|提名|辞职|辞任|辞去|免去|免职|解聘|不再担任|代行|补选|换届|退休|离任")
+
+# Ultra-compressed system prompt (~120 tokens)
+_SYSTEM_PROMPT = """从A股公告提取人事变动。忽略列席/委员会/担保/章程/分红等非人事项。
 角色:chairperson|ceo_equivalent|cfo_equivalent|board_secretary|senior_management|director|independent_director
 事件:appointment|resignation|removal|reelection|interim_assignment|title_change|nomination|non_renewal|retirement
-返JSON:{"events":[{"person_name":"名","role_raw":"原职","role_canonical":"角色","event_type":"事件","confidence":0.91,"evidence_excerpt":"原文"}]}"""
+返JSON:{"events":[{"person_name":"名","role_raw":"原职","role_canonical":"角色","event_type":"事件","evidence_excerpt":"原文"}]}"""
 
-# Short user template — only the variable content
 _USER_TEMPLATE = "标题：{title}\n正文：\n{body}"
 
 
 def ai_extraction_available() -> bool:
+    if _api_cooldown_until > time.time():
+        return False
     return bool(settings.ai_extraction_enabled and settings.ai_api_base_url and settings.ai_api_key)
 
 
@@ -102,7 +119,7 @@ def _record_ai_usage(
         finally:
             db.close()
     except Exception:
-        pass  # silently ignore logging failures
+        pass
 
 
 def _messages_url() -> str:
@@ -117,7 +134,6 @@ def _prefilter_body(text: str) -> str:
     original_len = len(text)
     for pattern in _PREFILTER_PATTERNS:
         text = pattern.sub("", text)
-    # Collapse multiple blank lines into one
     text = re.sub(r"\n{3,}", "\n\n", text).strip()
     saved = original_len - len(text)
     if saved > 0:
@@ -125,18 +141,55 @@ def _prefilter_body(text: str) -> str:
     return text
 
 
+def _extract_relevant_paragraphs(text: str, max_chars: int) -> str:
+    """Extract only paragraphs containing personnel keywords + 1 context paragraph each side.
+    Falls back to full truncated text if no keywords found."""
+    paragraphs = re.split(r"\n+|[。；;]", text)
+    paragraphs = [p.strip() for p in paragraphs if len(p.strip()) > 15]
+
+    matched_indices = set()
+    for i, p in enumerate(paragraphs):
+        if _PERSONNEL_KEYWORDS.search(p):
+            matched_indices.add(i)
+            if i > 0:
+                matched_indices.add(i - 1)
+            if i + 1 < len(paragraphs):
+                matched_indices.add(i + 1)
+
+    if not matched_indices:
+        return text[:max_chars]
+
+    result = []
+    total_len = 0
+    for i in sorted(matched_indices):
+        para = paragraphs[i] + "。"
+        if total_len + len(para) > max_chars:
+            break
+        result.append(para)
+        total_len += len(para)
+
+    if not result:
+        return text[:max_chars]
+
+    original_len = len(text)
+    saved = original_len - total_len
+    if saved > 0:
+        _optimization_stats["paragraph_extraction_savings"] += saved
+    return "".join(result)
+
+
 def _check_token_budget() -> bool:
     """Check if current token usage is within daily/hourly budget. Returns True if OK to proceed."""
     if settings.ai_daily_token_budget <= 0 and settings.ai_hourly_token_budget <= 0:
         return True
     try:
-        from datetime import timedelta
+        from datetime import datetime, timedelta
         from sqlalchemy import func, select
         from app.db import SessionLocal
         from app.models import AIUsageLog
         db = SessionLocal()
         try:
-            now = __import__("datetime").datetime.utcnow()
+            now = datetime.utcnow()
             if settings.ai_hourly_token_budget > 0:
                 hour_start = now.replace(minute=0, second=0, microsecond=0)
                 hourly_tokens = db.scalar(
@@ -211,11 +264,8 @@ def _candidate_from_ai_payload(item: dict[str, Any]) -> ExtractedEventCandidate 
     if not excerpt or person_name not in excerpt:
         return None
 
-    try:
-        confidence = float(item.get("confidence", 0.86))
-    except (TypeError, ValueError):
-        confidence = 0.86
-    confidence = min(max(confidence, 0.50), 0.93)
+    # Use fixed confidence — avoid AI returning unreliable confidence values
+    confidence = 0.86
     return ExtractedEventCandidate(
         person_name=person_name,
         role_canonical=role_canonical,
@@ -240,27 +290,43 @@ def _store_cache(content_hash: str, results: list[ExtractedEventCandidate]) -> N
     _extraction_cache[content_hash] = results
 
 
-def extract_events_with_ai(title: str, body_text: str, *, rule_confidence: float | None = None, rule_candidate_count: int = 0) -> list[ExtractedEventCandidate]:
-    """Extract events using AI. Skips call when rule engine is confident enough or budget is exceeded."""
+def extract_events_with_ai(
+    title: str,
+    body_text: str,
+    *,
+    rule_confidence: float | None = None,
+    rule_candidate_count: int = 0,
+) -> list[ExtractedEventCandidate]:
+    """Extract events using AI. Aggressively skips calls when not needed."""
     if not ai_extraction_available():
         return []
 
-    # Smart skip: if rule engine already has high confidence, skip AI call
+    # Skip 1: rule engine already confident enough
     if rule_confidence is not None and rule_confidence >= 0.90:
         _optimization_stats["smart_skips"] += 1
         return []
 
-    # Fast path: single simple rule candidate with decent confidence — no need for AI confirmation
+    # Skip 2: single rule candidate with decent confidence
     if rule_candidate_count == 1 and rule_confidence is not None and rule_confidence >= 0.88:
         _optimization_stats["smart_skips"] += 1
+        return []
+
+    # Skip 3: no management motion signal in body at all — AI will return empty anyway
+    # 44% of calls produce near-empty output, meaning AI found nothing. Pre-filter these.
+    normalized_title = normalize_title_text(title)
+    title_event_type = infer_event_type_from_title(normalized_title)
+    title_person_name = extract_person_name_from_title(normalized_title)
+    if not title_event_type and not title_person_name and not body_has_management_motion(body_text):
+        _optimization_stats["no_signal_skips"] += 1
         return []
 
     # Check token budget before making API call
     if not _check_token_budget():
         return []
 
-    normalized_title = normalize_title_text(title)
-    normalized_body = _prefilter_body(normalize_title_text(body_text))[: settings.ai_text_char_limit]
+    normalized_body = _prefilter_body(normalize_title_text(body_text))
+    # Smart paragraph extraction: only send paragraphs with personnel keywords + context
+    normalized_body = _extract_relevant_paragraphs(normalized_body, settings.ai_text_char_limit)
 
     # Check cache to avoid duplicate calls for same content
     cache_key = _content_hash(normalized_title, normalized_body)
@@ -271,7 +337,7 @@ def extract_events_with_ai(title: str, body_text: str, *, rule_confidence: float
 
     payload = {
         "model": settings.ai_model_name,
-        "max_tokens": 800,
+        "max_tokens": 256,
         "temperature": 0,
         "system": _SYSTEM_PROMPT,
         "messages": [{"role": "user", "content": _USER_TEMPLATE.format(title=normalized_title, body=normalized_body)}],
@@ -286,12 +352,29 @@ def extract_events_with_ai(title: str, body_text: str, *, rule_confidence: float
         },
         method="POST",
     )
-    try:
-        with urllib.request.urlopen(request, timeout=settings.ai_request_timeout) as response:
-            response_payload = json.loads(response.read().decode("utf-8"))
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, ValueError) as exc:
-        _record_ai_usage(model=settings.ai_model_name, success=False, error_message=str(exc)[:500])
-        return []
+
+    # Retry with exponential backoff for 429 errors
+    max_retries = 2
+    for attempt in range(max_retries + 1):
+        try:
+            with urllib.request.urlopen(request, timeout=settings.ai_request_timeout) as response:
+                response_payload = json.loads(response.read().decode("utf-8"))
+            break
+        except urllib.error.HTTPError as exc:
+            if exc.code == 429 and attempt < max_retries:
+                wait = (2 ** attempt) + 0.5  # 0.5s, 2.5s
+                time.sleep(wait)
+                continue
+            if exc.code == 403:
+                # 403 = API key issue or quota exhausted — cooldown for 1 hour
+                _api_cooldown_until = time.time() + 3600
+                _record_ai_usage(model=settings.ai_model_name, success=False, error_message=f"HTTP 403: cooldown 1h")
+                return []
+            _record_ai_usage(model=settings.ai_model_name, success=False, error_message=str(exc)[:500])
+            return []
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, ValueError) as exc:
+            _record_ai_usage(model=settings.ai_model_name, success=False, error_message=str(exc)[:500])
+            return []
 
     # Record token usage
     usage = response_payload.get("usage") or {}
