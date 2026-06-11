@@ -1,7 +1,7 @@
 # 项目状态总览
 
 > **产品**：高管人事动态（https://cnceo.org）
-> **最后更新**：2026-05-10
+> **最后更新**：2026-06-10
 
 ---
 
@@ -32,6 +32,17 @@
 | 2026-05-10 | 修复 favicon.ico 缺失时的 404 边界处理 | ✅ |
 | 2026-05-10 | 统一新的文档维护规则 | ✅ |
 | 2026-05-10 | 推广自动化第一轮：官网 `/blog` 上线、3 篇 SEO 文章公开、sitemap 更新 | ✅ |
+| 2026-06-09 | AI 抽取 token 优化：8 层降本（系统/用户拆分、prompt 压缩、prefilter、smart-skip、rule-only fast path、token 预算、缓存、输出上限） | ✅ |
+| 2026-06-09 | `/token-monitor` 仪表盘：按小时趋势、预算状态、节省估算、成本预测 | ✅ |
+| 2026-06-10 | `/stats` 重构：page_view_daily 预聚合（hourly + hour=-1 日级 rollup），读路径从 170s 降至亚秒 | ✅ |
+| 2026-06-10 | 进程内缓存层 `services_base.cached_call`：6 个热读路径（overview / recent_companies / coverage / launch / churn / stats）加 TTL+version 失效 | ✅ |
+| 2026-06-10 | 机器人检测重构：`page_views.is_bot` 列 + `is_bot_user_agent` 单一来源；bot 写入而非丢弃，统计走 `is_bot = FALSE` 部分索引 | ✅ |
+| 2026-06-10 | `/review` 分页 + `/api/review/queue\|groups` 增 `offset` 查询参数 | ✅ |
+| 2026-06-10 | 请求超时守护：30s `asyncio.wait_for` 包裹所有 handler，Cloudflare 524 之前先返 503 | ✅ |
+| 2026-06-10 | 速率限制放宽（API 60/min、浏览 120/min、ticker 扫描 60/min）匹配合法客户端行为 | ✅ |
+| 2026-06-10 | Schema 迁移重写：DDL 各自短事务 + PG `CREATE INDEX CONCURRENTLY`，不再与 sync-notices 死锁 | ✅ |
+| 2026-06-10 | 回填脚本：`scripts/backfill_is_bot.py`（pre-deploy 行的 is_bot）+ `scripts/backfill_page_view_daily.py` | ✅ |
+| 2026-06-10 | 重构模块单测：`tests/test_refactor_modules.py` 32 个 case（cache、aggregator、bot detection、API offset、bump-skip） | ✅ |
 
 ---
 
@@ -48,18 +59,23 @@
 
 **运营后台（管理员密码保护）**：
 - ✅ 新增记录：每日已发布事件归档
-- ✅ 审核台：按公告聚合的批量审核
+- ✅ 审核台：按公告聚合的批量审核（HTML + API 双分页）
 - ✅ 覆盖台账：数据质量与同步任务监控
+- ✅ 访问统计仪表盘：从 `page_view_daily` 预聚合读，bot 走 `is_bot = FALSE` 部分索引
+- ✅ Token 监控仪表盘：AI 抽取成本、按小时趋势、预算状态
 - ✅ 项目记忆库：系统运行状态与项目定义
 
 **基础设施**：
 - ✅ HTTPS（Let's Encrypt）
 - ✅ SEO（robots.txt、sitemap.xml、OG 标签）
 - ✅ 访问统计（page_views 表 + `/stats` 仪表盘，bot 过滤）
+- ✅ 进程内缓存（`services_base.cached_call`）：TTL+version 失效，6 个热读路径覆盖
+- ✅ 预聚合层（`page_view_daily`）：hourly + day-rollup，sync 末尾自动 refresh
 - ✅ 恶意爬虫拦截（14 种爬虫返回 403）
 - ✅ CMS 漏洞扫描拦截（WordPress 等返回 404）
-- ✅ 速率限制（单 IP 60/30 次每分钟，超限 429）
-- ✅ 防数据遍历（ticker 连续扫描 30+/分钟返回 429）
+- ✅ 速率限制（单 IP API 60/浏览 120/分钟，超限 429）
+- ✅ 防数据遍历（ticker 连续扫描 60+/分钟返回 429）
+- ✅ 请求超时守护（30s 超时返 503，避免 Cloudflare 524）
 - ✅ 公告同步定时任务（每 30 分钟）
 - ✅ 数据库备份定时任务
 - ✅ 零快照修复定时任务
@@ -82,9 +98,10 @@
 |------|------|------|
 | ~~SQLite/PG 兼容~~ | ~~已修复 ORDER BY + GROUP BY 问题~~ | ✅ 已解决 |
 | ~~数据隔离~~ | ~~alert/watchlist 跨会话泄露~~ | ✅ 已解决 |
+| ~~无单元测试覆盖抽取逻辑~~ | 2026-06-10 起 `tests/test_refactor_modules.py` 32 个 case 覆盖缓存、聚合、bot、API offset | ✅ 部分解决（cninfo 抓取与人物去重仍待补） |
 | 本地开发仍用 SQLite | 与生产环境不一致 | 低 |
-| 无单元测试覆盖抽取逻辑 | 核心抽取逻辑缺少自动化测试 | 中 |
 | 部署脚本依赖 sudo | 文件权限管理不够精细 | 低 |
+| `data/` 下临时 debug 脚本未清理 | 35+ 个一次性脚本、deploy zip、sqlite db 仍 untracked | 低（建议补 .gitignore 后清理） |
 
 ---
 
