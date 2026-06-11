@@ -17,6 +17,7 @@ from app.normalization import (
     extract_person_name_from_title,
     infer_event_type_from_title,
     normalize_title_text,
+    _normalize_person_name as _rule_normalize,
 )
 
 # In-memory cache: content_hash -> extraction results, avoids duplicate AI calls
@@ -225,14 +226,13 @@ def _extract_json_object(raw_text: str) -> dict[str, Any]:
 
 
 def _normalize_person_name(raw_name: Any) -> str | None:
-    name = normalize_title_text(str(raw_name or ""))
-    name = name.replace("先生", "").replace("女士", "").strip()
-    if re.fullmatch(r"[一-龥]{2,4}", name):
-        return name
-    name = re.sub(r"\s+", " ", name)
-    if re.fullmatch(r"[A-Za-z][A-Za-z .'\-]{1,40}[A-Za-z]", name):
-        return name
-    return None
+    """委托 app.normalization._normalize_person_name — 统一两路径的人名校验。
+
+    包含前缀剥离（"经"、"经审查"、"经审核"、"经董事会"、"提名"、"聘任"等）、
+    INVALID_PERSON_TOKENS 检查、"经理/董事/委员" 后缀检查、
+    "声明/名单/议案/报告" 检查、拉丁名 fallback。
+    """
+    return _rule_normalize(str(raw_name or ""))
 
 
 def _candidate_from_ai_payload(item: dict[str, Any]) -> ExtractedEventCandidate | None:

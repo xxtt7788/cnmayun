@@ -99,6 +99,22 @@ class NoticeExtractionTests(unittest.TestCase):
         self.assertEqual(_normalize_person_name("乔胜俊"), "乔胜俊")
         self.assertEqual(_normalize_person_name("张文"), "张文")
 
+    def test_ai_path_delegates_to_rule_normalize(self) -> None:
+        """AI 路径的 _normalize_person_name 必须和规则路径完全等价。
+        这保证 '经公' 等假人名在 AI 路径下也被拒绝。"""
+        from app.ai_extractor import _normalize_person_name as ai_normalize
+        from app.normalization import _normalize_person_name as rule_normalize
+
+        # 假人名 — 两条路径都必须返回 None 且行为一致
+        for value in ["经公", "经董事会", "经审查", "经审核", "经公司", ""]:
+            self.assertIsNone(ai_normalize(value), f"AI path should reject {value!r}")
+            self.assertEqual(ai_normalize(value), rule_normalize(value))
+
+        # 真实名字 — 两条路径都必须返回相同的合法名字
+        for value in ["乔胜俊", "杜若榕", "王浩", "刘松", "张文", "曹锐"]:
+            self.assertEqual(ai_normalize(value), value)
+            self.assertEqual(ai_normalize(value), rule_normalize(value))
+
 
 if __name__ == "__main__":
     unittest.main()
