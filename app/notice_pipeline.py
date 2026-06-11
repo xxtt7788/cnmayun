@@ -516,6 +516,12 @@ def reprocess_pending_review_documents(db: Session, limit: int = 100) -> tuple[i
         review_count += result[1]
         db.flush()
     recompute_company_metrics(db)
+    # Refresh /stats cache so any UI showing pending review counts stays fresh
+    try:
+        from app.stats_aggregator import refresh_stats_cache
+        refresh_stats_cache()
+    except Exception:  # noqa: BLE001
+        pass
     return processed_count, created_count, review_count
 
 
@@ -590,6 +596,17 @@ def sync_management_notices(
         db.flush()
 
     recompute_company_metrics(db)
+    # Refresh the page-view aggregate too. /stats reads from page_view_daily;
+    # this keeps the dashboard fresh on every notice sync (every 30 min).
+    # Wrapped in try/except so a stats-aggregate error never breaks the
+    # notice pipeline (which is the higher-priority job).
+    try:
+        from app.stats_aggregator import recompute_page_view_daily, refresh_stats_cache
+        recompute_page_view_daily(db, days=2)
+        refresh_stats_cache()
+    except Exception as exc:  # noqa: BLE001
+        import logging
+        logging.getLogger(__name__).warning("page_view_daily refresh failed: %s", exc)
     sync_job.status = "completed_with_errors" if sync_job.failed_count else "completed"
     sync_job.completed_at = datetime.utcnow()
     return sync_job
