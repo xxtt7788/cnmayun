@@ -339,6 +339,9 @@ class PageView(Base):
     ip_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     session_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    # is_bot is nullable to support staged backfill: NULL means "not classified yet",
+    # which is treated conservatively as "include" until backfill_is_bot.py runs.
+    is_bot: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
 
 class AIUsageLog(Base):
@@ -353,3 +356,34 @@ class AIUsageLog(Base):
     success: Mapped[bool] = mapped_column(default=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class PageViewDaily(Base):
+    """Pre-aggregated roll-up of ``PageView`` rows, refreshed by ``app.stats_aggregator``.
+
+    One row per (day, hour, path, browser_bucket, referrer_host, is_bot) tuple.
+    Powers the /stats dashboard so the read path never touches raw ``page_views``.
+
+    ``hour = -1`` is the day-level rollup (no hourly split).
+    """
+    __tablename__ = "page_view_daily"
+    __table_args__ = (
+        UniqueConstraint(
+            "day", "hour", "path", "browser_bucket", "referrer_host", "is_bot",
+            name="uq_pv_daily_dims",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    day: Mapped[date] = mapped_column(Date, index=True)
+    # -1 means "day-level" rollup; 0..23 means specific hour of that day.
+    hour: Mapped[int] = mapped_column(Integer, default=-1)
+    path: Mapped[str] = mapped_column(String(256), index=True)
+    browser_bucket: Mapped[str] = mapped_column(String(16))
+    referrer_host: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    is_bot: Mapped[bool] = mapped_column(Boolean, default=False)
+    pv_count: Mapped[int] = mapped_column(Integer, default=0)
+    uv_count: Mapped[int] = mapped_column(Integer, default=0)
+    session_count: Mapped[int] = mapped_column(Integer, default=0)
+    single_page_session_count: Mapped[int] = mapped_column(Integer, default=0)
+    refreshed_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

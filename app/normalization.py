@@ -602,3 +602,37 @@ def extract_review_hints_from_text(title: str, body_text: str, limit: int = 8) -
                     return hints
 
     return hints[:limit]
+
+
+# --- Bot detection (shared between middleware write-path and stats read-path) ---
+# Substring match (lowercased). Core search engine crawlers (Googlebot, Bingbot,
+# Baiduspider, Sogou) are intentionally NOT listed to preserve SEO.
+_BOT_SIGNATURES: tuple[str, ...] = (
+    "gptbot",                # OpenAI: trains GPT models, no SEO value
+    "mj12bot",               # Majestic SEO: link index scraper
+    "googleother",           # Google non-search crawler
+    "tlm-audit-scanner",     # Unknown scanner
+    "ahrefsbot",             # Ahrefs SEO tool
+    "semrushbot",            # SEMrush SEO tool
+    "dotbot",                # Moz SEO tool
+    "yandexbot",             # Yandex (low traffic value for China B2B)
+    "exabot",                # Exalead (defunct search engine)
+    "facebot",               # Facebook scraper
+    "ia_archiver",           # Internet Archive
+    "datadog",               # Datadog monitoring crawler
+    "uptimerobot",           # Uptime monitoring
+    "screaming frog",        # SEO audit tool
+)
+
+
+def is_bot_user_agent(user_agent: str | None) -> bool:
+    """Return True if the User-Agent is a known data-scraping bot.
+
+    Single source of truth — reused by the request middleware (write path) and
+    the stats aggregator / get_stats (read path). Centralising the signature list
+    avoids the bug of two divergent bot lists drifting apart.
+    """
+    if not user_agent:
+        return True
+    ua_lower = user_agent.lower()
+    return any(sig in ua_lower for sig in _BOT_SIGNATURES)
