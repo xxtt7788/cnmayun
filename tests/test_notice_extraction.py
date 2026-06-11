@@ -88,6 +88,17 @@ class NoticeExtractionTests(unittest.TestCase):
         ]
         self.assertEqual(bad_hints, [])
 
+    def test_rule_normalize_rejects_经公(self) -> None:
+        """规则路径的 _normalize_person_name 必须拒绝"经公"等由'经'+后随字组成的假人名。
+        '经' 作为常见介词不应被当作人名首字。"""
+        from app.normalization import _normalize_person_name
+        self.assertIsNone(_normalize_person_name("经公"))
+        self.assertIsNone(_normalize_person_name("经董事会"))
+        self.assertIsNone(_normalize_person_name("经审查"))
+        # 真实名字保留
+        self.assertEqual(_normalize_person_name("乔胜俊"), "乔胜俊")
+        self.assertEqual(_normalize_person_name("张文"), "张文")
+
 
 if __name__ == "__main__":
     unittest.main()

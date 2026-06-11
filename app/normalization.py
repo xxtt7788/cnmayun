@@ -345,7 +345,7 @@ def should_skip_notice(title: str, body_text: str) -> bool:
 
 def _normalize_person_name(raw_name: str) -> str | None:
     normalized = normalize_title_text(raw_name).replace("先生", "").replace("女士", "").strip()
-    normalized = re.sub(r"^(?:同意|拟|经审查|经审核|经董事会|被提名为|被提名|提名|补选|聘任|任命|选举|选聘|当选|免去|免职|解聘)+", "", normalized).strip()
+    normalized = re.sub(r"^(?:同意|拟|经董事会|经审查|经审核|经|被提名为|被提名|提名|补选|聘任|任命|选举|选聘|当选|免去|免职|解聘)+", "", normalized).strip()
     while len(normalized) >= 3 and normalized[0] in {"任", "聘", "选", "举", "命", "补", "提"}:
         normalized = normalized[1:]
     normalized = re.sub(r"[先女男已]+$", "", normalized).strip()
