@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import csv
 import hashlib
 import html
@@ -23,7 +24,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.db import Base, engine, ensure_schema, get_db, session_scope
-from app.models import Company
+from app.models import Company, ReviewQueue
 from app.notice_pipeline import (
     reprocess_review_document,
     reprocess_review_item,
@@ -147,33 +148,8 @@ def _is_admin_cookie_valid(cookie_value: str | None) -> bool:
 
 _pv_executor = ThreadPoolExecutor(max_workers=2)
 
-# Known bot signatures (substring match).
-# NOTE: Core search engine crawlers (Googlebot, Bingbot, Baiduspider, Sogou)
-# are intentionally NOT listed here to preserve SEO. Only block data scrapers
-# and non-search bots that consume bandwidth without bringing traffic.
-_BOT_SIGNATURES = [
-    "gptbot",          # OpenAI: trains GPT models, no SEO value
-    "mj12bot",         # Majestic SEO: link index scraper
-    "googleother",     # Google non-search crawler
-    "tlm-audit-scanner", # Unknown scanner
-    "ahrefsbot",       # Ahrefs SEO tool
-    "semrushbot",      # SEMrush SEO tool
-    "dotbot",          # Moz SEO tool
-    "yandexbot",       # Yandex (low traffic value for China B2B)
-    "exabot",          # Exalead (defunct search engine)
-    "facebot",         # Facebook scraper
-    "ia_archiver",     # Internet Archive
-    "datadog",         # Datadog monitoring crawler
-    "uptimerobot",     # Uptime monitoring
-    "screaming frog",  # SEO audit tool
-]
-
-
-def _is_bot(user_agent: str | None) -> bool:
-    if not user_agent:
-        return True
-    ua_lower = user_agent.lower()
-    return any(sig in ua_lower for sig in _BOT_SIGNATURES)
+# Bot detection — shared with stats / aggregator. See app/normalization.py.
+from app.normalization import is_bot_user_agent as _is_bot  # noqa: E402
 
 
 # --- Rate limiting & anti-scraping (in-memory, per-process) ---
@@ -217,10 +193,21 @@ def _is_ticker_scanning(ip: str, ticker: str | None, limit: int = 30, window: in
     return False
 
 
-def _record_pv_background(path: str, referrer: str | None, user_agent: str | None, ip: str, session_id: str) -> None:
-    if _is_bot(user_agent):
-        return
+def _record_pv_background(path: str, referrer: str | None, user_agent: str | None, ip: str, session_id: str, skip_stats_bump: bool = False) -> None:
+    """Record every page view (including bots), tagging is_bot for fast filtering.
+
+    We previously dropped bot hits before writing. Now we persist them with an
+    ``is_bot`` flag so:
+      - ``/stats`` can filter via a partial index instead of a 14-ILIKE chain
+      - raw UA strings remain available for pattern analysis
+
+    ``skip_stats_bump`` is True for the /stats page itself: bumping the
+    version there would invalidate the cache on every dashboard refresh,
+    defeating the purpose of caching. Other paths still invalidate so the
+    dashboard reflects new activity within one request.
+    """
     from app.db import SessionLocal
+    from app.services_base import bump_version
     db = SessionLocal()
     try:
         ip_hash = hashlib.sha256(ip.encode()).hexdigest()[:16] if ip else None
@@ -231,7 +218,13 @@ def _record_pv_background(path: str, referrer: str | None, user_agent: str | Non
             user_agent=user_agent,
             ip_hash=ip_hash,
             session_id=session_id,
+            is_bot=_is_bot(user_agent),
         )
+        if not skip_stats_bump:
+            # Invalidate the cached /stats dashboard so the next read picks
+            # up the new row. Cheap (one integer bump under a lock); avoids
+            # the 60s TTL lag on admin metrics.
+            bump_version("stats")
     finally:
         db.close()
 
@@ -338,6 +331,37 @@ def _get_promotion_article(slug: str) -> dict | None:
     return {"slug": safe_slug, "title": title, "summary": summary, "html": _markdown_to_html(text)}
 
 
+# Per-request hard timeout. Cloudflare's free tier gives the origin 100s; a single
+# hung request will then surface to users as a 524. We cap at 30s (well below the
+# Cloudflare limit) so a slow request returns a 503 to the client long before
+# the upstream proxy times out — and so the user sees a clear error instead of
+# an opaque "A timeout occurred" page.
+_REQUEST_TIMEOUT_SECONDS = 30.0
+
+
+@app.middleware("http")
+async def _request_timeout_guard(request: Request, call_next):
+    """Abort the request with a 503 if processing exceeds the timeout.
+
+    Works for sync route handlers too: we run ``call_next`` in a worker thread
+    and ``asyncio.wait_for`` the future. Sync code that blocks for >30s will
+    be cancelled (the worker thread keeps running but the response is already
+    sent, so the user gets a fast 503).
+    """
+    try:
+        return await asyncio.wait_for(call_next(request), timeout=_REQUEST_TIMEOUT_SECONDS)
+    except asyncio.TimeoutError:
+        import logging
+        logging.getLogger(__name__).warning(
+            "request exceeded %.1fs: %s %s",
+            _REQUEST_TIMEOUT_SECONDS, request.method, request.url.path,
+        )
+        return JSONResponse(
+            {"detail": "Request timed out. The page is taking too long to render."},
+            status_code=503,
+        )
+
+
 @app.middleware("http")
 async def require_admin_login(request: Request, call_next):
     path = request.url.path
@@ -353,14 +377,15 @@ async def require_admin_login(request: Request, call_next):
 
     # Rate limiting
     client_ip = request.client.host if request.client else ""
-    api_limit = 30 if path.startswith("/api/") else 60
+    # Higher limits for browsing, lower for API
+    api_limit = 60 if path.startswith("/api/") else 120
     if _is_rate_limited(client_ip, path, limit=api_limit, window=60):
         return JSONResponse({"detail": "Too Many Requests"}, status_code=429)
 
     # Anti-ticker-scanning on /feed
     if path == "/feed":
         ticker = request.query_params.get("ticker")
-        if _is_ticker_scanning(client_ip, ticker, limit=30, window=60):
+        if _is_ticker_scanning(client_ip, ticker, limit=60, window=60):
             return JSONResponse({"detail": "Too Many Requests"}, status_code=429)
 
     # Get or create anonymous visitor ID
@@ -420,6 +445,10 @@ async def require_admin_login(request: Request, call_next):
             request.headers.get("user-agent"),
             ip,
             visitor_id,
+            # Skip cache invalidation for /stats itself: the page IS the cache
+            # consumer, so bumping would force a miss on every refresh. The
+            # 60s TTL keeps it bounded either way.
+            path == "/stats",
         )
 
     return response
@@ -689,17 +718,29 @@ def watchlists_page(request: Request, db: Session = Depends(get_db)):
 
 
 @app.get("/review", response_class=HTMLResponse)
-def review_page(request: Request, db: Session = Depends(get_db)):
-    groups = list_review_document_groups(db, limit=500)
-    pending_item_count = sum(group["review_count"] for group in groups)
+def review_page(
+    request: Request,
+    offset: int = Query(0, ge=0),
+    limit: int = Query(50, ge=10, le=100),
+    db: Session = Depends(get_db),
+):
+    groups = list_review_document_groups(db, status="pending", limit=limit, offset=offset)
+    pending_total = db.scalar(
+        select(func.count(func.distinct(ReviewQueue.source_document_id)))
+        .where(ReviewQueue.status == "pending")
+    ) or 0
     return templates.TemplateResponse(
         request,
         "review.html",
         {
             "groups": groups,
-            "pending_item_count": pending_item_count,
+            "pending_item_count": pending_total,
             "pending_document_count": len(groups),
             "sync_jobs": list_recent_sync_jobs(db),
+            "pagination": _pagination_context(
+                total=pending_total, limit=limit, offset=offset,
+                path="/review", params={},
+            ),
         },
     )
 
@@ -1039,13 +1080,23 @@ def alerts_read_api(alert_id: int, db: Session = Depends(get_db)):
 
 
 @app.get("/api/review/queue", response_model=list[ReviewQueueItemOut])
-def review_queue_api(status: str = "pending", limit: int = 100, db: Session = Depends(get_db)):
-    return list_review_queue(db, status=status, limit=limit)
+def review_queue_api(
+    status: str = "pending",
+    limit: int = 100,
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+):
+    return list_review_queue(db, status=status, limit=limit, offset=offset)
 
 
 @app.get("/api/review/groups")
-def review_groups_api(status: str = "pending", limit: int = 500, db: Session = Depends(get_db)):
-    return list_review_document_groups(db, status=status, limit=limit)
+def review_groups_api(
+    status: str = "pending",
+    limit: int = 500,
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+):
+    return list_review_document_groups(db, status=status, limit=limit, offset=offset)
 
 
 @app.post("/api/review/queue/{review_id}/approve")
