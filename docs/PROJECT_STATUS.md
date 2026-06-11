@@ -1,7 +1,7 @@
 # 项目状态总览
 
 > **产品**：高管人事动态（https://cnceo.org）
-> **最后更新**：2026-06-10
+> **最后更新**：2026-06-12
 
 ---
 
@@ -43,6 +43,7 @@
 | 2026-06-10 | Schema 迁移重写：DDL 各自短事务 + PG `CREATE INDEX CONCURRENTLY`，不再与 sync-notices 死锁 | ✅ |
 | 2026-06-10 | 回填脚本：`scripts/backfill_is_bot.py`（pre-deploy 行的 is_bot）+ `scripts/backfill_page_view_daily.py` | ✅ |
 | 2026-06-10 | 重构模块单测：`tests/test_refactor_modules.py` 32 个 case（cache、aggregator、bot detection、API offset、bump-skip） | ✅ |
+| 2026-06-11 | AI 提取器人名修复：议案标题句不再生成低信号 hint；AI 与规则路径共用同一套人名校验，杜绝"经公"类假人名。spec 见 `docs/superpowers/specs/2026-06-11-ai-extractor-person-name-fixes-design.md` | ✅ |
 
 ---
 
