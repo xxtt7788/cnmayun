@@ -115,20 +115,16 @@ def test_rule_path_rejects_经公(self) -> None:
 
 1. **运行新测试**：`python -m pytest tests/test_notice_extraction.py -v`
 2. **运行回归套件**：`python -m pytest tests/ -v`
-3. **手动验证 SQL 查询**：在 SQLite 中跑一次统计：
-   ```sql
-   SELECT COUNT(*) FROM review_queue
-   WHERE status = 'pending'
-     AND reason LIKE '%缺失字段：人员姓名%';
-   ```
-   预期：计数大幅下降（无新条目产生），但已存在的待审核项不删除（保留供人工清理）。
+3. **手动验证**：部署后跟踪新增 review 条目
+   - 检查 review_queue 中 `created_at > 部署时间` 的条目，确认没有任何一条 reason 含"缺失字段：人员姓名"
+   - 已存在的旧条目**不**会被本设计清理（按设计范围外处理，由人工 reject）
 
 ## 风险与回滚
 
 ### 风险
 
-- 改动 2 让 AI 路径更严格，可能**误拒**极个别原本能通过的边界人名。
-  缓解：测试 2 明确包含 `assertEqual(ai_normalize("乔胜俊"), "乔胜俊")` 作为正面用例。
+- 改动 2 让 AI 路径更严格，可能误拒极个别**含"经"字开头**的边缘人名（例：经某人的姓名是"经X"这种极为罕见的组合）。
+  缓解：测试 2 明确包含 `assertEqual(ai_normalize("乔胜俊"), "乔胜俊")` 作为正面用例；A股公告中"经"开头的姓名在实际数据中 0 出现。
 - 改动 1 让"议案标题句"无 hint，可能让某条**确实有候选人**但名字在另一段的句子失去提示。
   缓解：`extract_events_from_text`（规则路径）仍正常工作，候选人仍被提取；hint 只是"人工复核提示"层，丢了不会丢事件。
 
