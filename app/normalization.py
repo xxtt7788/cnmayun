@@ -567,6 +567,10 @@ def extract_review_hints_from_text(title: str, body_text: str, limit: int = 8) -
             continue
 
         person_names = _extract_hint_person_names(sentence)
+        # 过滤：句子含人事关键词但无具体人名（如"审议通过了《关于提名...的议案》"），
+        # 跳过该句，不生成低信号 hint。
+        if not any(person_names):
+            continue
 
         roles = extract_canonical_roles(sentence)
         event_type = infer_event_type_from_title(sentence)

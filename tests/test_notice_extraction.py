@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 
 from app.normalization import extract_events_from_text
+from app.normalization import extract_review_hints_from_text
 
 
 DOC_882_TITLE = "奥康国际第八届董事会提名委员会2025年第三次会议决议"
@@ -73,6 +74,19 @@ class NoticeExtractionTests(unittest.TestCase):
             [(item.person_name, item.role_canonical, item.event_type) for item in events],
             [("于涛", "director", "appointment")],
         )
+
+    def test_vote_summary_without_names_does_not_create_hint(self) -> None:
+        """议案标题句（如"审议通过了《关于提名...的议案》"）含人事关键词但无具体人名，
+        不应生成"缺失字段：人员姓名" hint 进入 review 队列。"""
+        hints = extract_review_hints_from_text(
+            "第十届董事会第十三次会议决议公告",
+            "（一）审议通过了《关于提名公司第十一届董事会非独立董事候选人的议案》",
+        )
+        bad_hints = [
+            h for h in hints
+            if h.person_name is None and "人员姓名" in h.missing_fields
+        ]
+        self.assertEqual(bad_hints, [])
 
 
 if __name__ == "__main__":
