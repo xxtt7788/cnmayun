@@ -204,18 +204,16 @@ git commit -m "fix(normalization): reject 经-prefixed false names like '经公'
         from app.ai_extractor import _normalize_person_name as ai_normalize
         from app.normalization import _normalize_person_name as rule_normalize
 
-        # 假人名 — 两条路径都必须返回 None
+        # 假人名 — 两条路径都必须返回 None 且行为一致
         for value in ["经公", "经董事会", "经审查", "经审核", "经公司", ""]:
             self.assertIsNone(ai_normalize(value), f"AI path should reject {value!r}")
             self.assertEqual(ai_normalize(value), rule_normalize(value))
 
         # 真实名字 — 两条路径都必须返回相同的合法名字
         for value in ["乔胜俊", "杜若榕", "王浩", "刘松", "张文", "曹锐"]:
-            self.assertEqual(ai_normalize(value), "经".join(value.split("经")) or value)
+            self.assertEqual(ai_normalize(value), value)
             self.assertEqual(ai_normalize(value), rule_normalize(value))
 ```
-
-> 注：`ai_normalize("乔胜俊")` 应等于 `"乔胜俊"`，不是 `"经".join(...)`。最后一条 assert 中 `"经".join(value.split("经")) or value` 仅在 `value` 不含 "经" 时等于 `value` 本身 — 对所有真实名字都成立，所以是个间接 sanity check。如果失败，说明 AI 路径对真实名字有意外处理。
 
 - [ ] **Step 2: 运行测试确认它失败（红）**
 
@@ -226,7 +224,7 @@ python -m pytest tests/test_notice_extraction.py::NoticeExtractionTests::test_ai
 
 **Expected:** FAIL — `ai_normalize("经公")` 当前返回 `"经公"`（不是 None），因为 AI 路径的本地函数不含 INVALID_PERSON_TOKENS 检查。
 
-- [ ] **Step 3: 在 `app/ai_extractor.py` 顶部 import 块添加 `_normalize_person_name`**
+- [ ] **Step 3: 在 `app/ai_extractor.py` 顶部 import 块添加 `_normalize_person_name as _rule_normalize`**
 
 打开 `app/ai_extractor.py`，找到第 12-20 行的 import 块：
 
@@ -246,9 +244,13 @@ from app.normalization import (
 
 ```python
     normalize_title_text,
-    _normalize_person_name,
+    _normalize_person_name as _rule_normalize,
 )
 ```
+
+**为什么用 `as _rule_normalize`？**
+- 本文件稍后会定义一个**同名**的本地 `_normalize_person_name` 函数
+- 用别名导入避免命名冲突，函数体内可直接调用 `_rule_normalize(...)`
 
 - [ ] **Step 4: 替换 `app/ai_extractor.py` 第 227-235 行的 `_normalize_person_name` 函数**
 
@@ -276,13 +278,8 @@ def _normalize_person_name(raw_name: Any) -> str | None:
     INVALID_PERSON_TOKENS 检查、"经理/董事/委员" 后缀检查、
     "声明/名单/议案/报告" 检查、拉丁名 fallback。
     """
-    from app.normalization import _normalize_person_name as _rule_normalize
     return _rule_normalize(str(raw_name or ""))
 ```
-
-**为什么本地函数名仍叫 `_normalize_person_name`？**
-- 调用方 (`_candidate_from_ai_payload`) 已用这个名字
-- 内部通过 `as _rule_normalize` 别名避免自引用
 
 - [ ] **Step 5: 重新运行测试确认它通过（绿）**
 
