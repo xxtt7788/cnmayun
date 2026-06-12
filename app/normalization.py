@@ -609,23 +609,44 @@ def extract_review_hints_from_text(title: str, body_text: str, limit: int = 8) -
 
 
 # --- Bot detection (shared between middleware write-path and stats read-path) ---
-# Substring match (lowercased). Core search engine crawlers (Googlebot, Bingbot,
-# Baiduspider, Sogou) are intentionally NOT listed to preserve SEO.
+# Substring match (lowercased). We follow a "block by default" stance for
+# non-SEO crawlers:
+#   - AI training / assistant crawlers: no SEO value, train on user content
+#   - SEO link-scrapers: no traffic value
+# Core search engine crawlers (Googlebot, Bingbot, Baiduspider, Sogou) are
+# intentionally NOT listed to preserve SEO.
 _BOT_SIGNATURES: tuple[str, ...] = (
-    "gptbot",                # OpenAI: trains GPT models, no SEO value
-    "mj12bot",               # Majestic SEO: link index scraper
-    "googleother",           # Google non-search crawler
-    "tlm-audit-scanner",     # Unknown scanner
-    "ahrefsbot",             # Ahrefs SEO tool
-    "semrushbot",            # SEMrush SEO tool
-    "dotbot",                # Moz SEO tool
-    "yandexbot",             # Yandex (low traffic value for China B2B)
-    "exabot",                # Exalead (defunct search engine)
-    "facebot",               # Facebook scraper
-    "ia_archiver",           # Internet Archive
-    "datadog",               # Datadog monitoring crawler
-    "uptimerobot",           # Uptime monitoring
-    "screaming frog",        # SEO audit tool
+    # AI training / assistant crawlers (low/no SEO value)
+    "claudebot",              # Anthropic ClaudeBot
+    "anthropic-ai",           # Anthropic assistant fetcher
+    "perplexitybot",          # Perplexity AI indexer
+    "perplexity-user",        # Perplexity user-triggered fetch
+    "chatgpt-user",           # OpenAI ChatGPT user-triggered fetch
+    "oai-searchbot",          # OpenAI SearchGPT
+    "gptbot",                 # OpenAI GPT training crawler
+    "google-extended",        # Google Gemini training (NOT a search crawler)
+    "applebot-extended",      # Apple Intelligence training
+    "amazonbot",              # Amazon AI / Q
+    "meta-externalagent",     # Meta AI training
+    "ccbot",                  # Common Crawl (feeds many LLM training pipelines)
+    "bytespider",             # ByteDance (TikTok) AI training
+    "duckassistbot",          # DuckDuckGo AI assist
+    "turnitinbot",            # Turnitin (AI-detection crawler)
+
+    # SEO / link-scraping / monitoring bots (no traffic value)
+    "mj12bot",                # Majestic SEO link index scraper
+    "googleother",            # Google non-search crawler
+    "tlm-audit-scanner",      # Unknown scanner
+    "ahrefsbot",              # Ahrefs SEO tool
+    "semrushbot",             # SEMrush SEO tool
+    "dotbot",                 # Moz SEO tool
+    "yandexbot",              # Yandex (low traffic value for China B2B)
+    "exabot",                 # Exalead (defunct search engine)
+    "facebot",                # Facebook scraper
+    "ia_archiver",            # Internet Archive
+    "datadog",                # Datadog monitoring crawler
+    "uptimerobot",            # Uptime monitoring
+    "screaming frog",         # SEO audit tool
 )
 
 
