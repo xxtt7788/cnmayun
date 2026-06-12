@@ -234,6 +234,41 @@ class IsBotUserAgentTests(unittest.TestCase):
 
 
 # ============================================================================
+# scripts.reclassify_bot_signatures.build_reclassify_sql
+# ============================================================================
+
+class ReclassifySqlBuilderTests(unittest.TestCase):
+    """Verify the SQL builder emits a syntactically valid single UPDATE that
+    re-tags ``is_bot=FALSE`` rows whose UA matches a known signature.
+    """
+
+    def test_returns_non_empty_sql(self) -> None:
+        from scripts.reclassify_bot_signatures import build_reclassify_sql
+        sql = build_reclassify_sql(["claudebot", "gptbot"])
+        self.assertIsInstance(sql, str)
+        self.assertGreater(len(sql), 50)
+        # Single UPDATE — no batching, no loops
+        self.assertEqual(sql.count("UPDATE page_views"), 1)
+        # Targets FALSE only (not NULL — backfill_is_bot.py handles NULLs)
+        self.assertIn("is_bot = FALSE", sql)
+        # Sets to TRUE
+        self.assertIn("is_bot = TRUE", sql)
+        # Uses case-insensitive substring match
+        self.assertIn("LOWER(COALESCE(user_agent, ''))", sql)
+        self.assertIn("LIKE :p0", sql)
+        self.assertIn("LIKE :p1", sql)
+
+    def test_binds_one_param_per_signature(self) -> None:
+        from scripts.reclassify_bot_signatures import build_reclassify_sql
+        sql = build_reclassify_sql(["claudebot", "gptbot", "perplexitybot"])
+        self.assertIn(":p0", sql)
+        self.assertIn(":p1", sql)
+        self.assertIn(":p2", sql)
+        # AND no spillover to p3
+        self.assertNotIn(":p3", sql)
+
+
+# ============================================================================
 # /api/review/* offset behavior
 # ============================================================================
 
