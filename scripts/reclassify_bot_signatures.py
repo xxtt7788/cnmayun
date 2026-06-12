@@ -45,12 +45,27 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 log = logging.getLogger("reclassify_bot_signatures")
 
 
+def _escape_like(s: str) -> str:
+    """Escape SQL LIKE metacharacters in a substring for safe binding.
+
+    ``%`` and ``_`` are LIKE wildcards; ``\\`` is the LIKE escape char. Wrap
+    each signature in ``%`` for substring matching AFTER escaping the inner
+    contents, so a signature like ``ia_archiver`` matches only the literal
+    underscore, not "any single character between ia and archiver".
+    """
+    return s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 def build_reclassify_sql(signatures: tuple[str, ...] | list[str]) -> str:
     """Build a single UPDATE that flips is_bot=FALSE -> TRUE for matching UAs.
 
     Exposed as a pure function (no DB access) so it can be unit-tested without
     a live database connection. The SQL is dialect-portable: PostgreSQL and
     SQLite both support ``LOWER(x) LIKE :p`` with bound parameters.
+
+    Note: signatures containing SQL LIKE metacharacters (``%``, ``_``) must be
+    escaped by the caller before binding (see ``_escape_like``). The bound
+    param values for ``main()`` are wrapped in ``%`` for substring matching.
     """
     if not signatures:
         raise ValueError("signatures must be non-empty")
@@ -70,7 +85,7 @@ def main() -> None:
     try:
         start = time.monotonic()
         sql = build_reclassify_sql(_BOT_SIGNATURES)
-        params = {f"p{i}": f"%{sig}%" for i, sig in enumerate(_BOT_SIGNATURES)}
+        params = {f"p{i}": f"%{_escape_like(sig)}%" for i, sig in enumerate(_BOT_SIGNATURES)}
         log.info(
             "reclassifying with %d signatures (claudebot=%s, gptbot=%s, ...)",
             len(_BOT_SIGNATURES),
@@ -87,14 +102,27 @@ def main() -> None:
 
         # Refresh the daily aggregate so /stats reflects the change immediately,
         # without waiting for the next sync-notices cycle (≤30 min).
+        # Wrap in try/except: the UPDATE has already been committed, so the
+        # reclassification is durable — if the recompute fails, we log a warning
+        # rather than masking the success. Operator can rerun the recompute
+        # manually (or wait for the next sync-notices cycle, ≤30 min).
         from app.stats_aggregator import recompute_page_view_daily
         agg_start = time.monotonic()
-        rows_upserted = recompute_page_view_daily(db, days=14)
-        log.info(
-            "recomputed page_view_daily (14-day window, %d rows upserted, %.1fs)",
-            rows_upserted,
-            time.monotonic() - agg_start,
-        )
+        try:
+            rows_upserted = recompute_page_view_daily(db, days=14)
+        except Exception:  # noqa: BLE001 — best-effort cache refresh
+            log.warning(
+                "recompute_page_view_daily failed; UPDATE is committed but "
+                "/stats may be stale until next sync cycle (≤30 min) or "
+                "manual `python -m scripts.backfill_page_view_daily` rerun",
+                exc_info=True,
+            )
+        else:
+            log.info(
+                "recomputed page_view_daily (14-day window, %d rows upserted, %.1fs)",
+                rows_upserted,
+                time.monotonic() - agg_start,
+            )
     finally:
         db.close()
 

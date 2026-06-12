@@ -269,6 +269,17 @@ class ReclassifySqlBuilderTests(unittest.TestCase):
         # duplicate :p0, etc.). More robust than the original "negative space" check.
         self.assertEqual(len(re.findall(r":p\d+", sql)), 3)
 
+    def test_escape_like_handles_metachars(self) -> None:
+        from scripts.reclassify_bot_signatures import _escape_like
+        # Underscore is the LIKE wildcard for "any single char" — must be escaped
+        self.assertEqual(_escape_like("ia_archiver"), "ia\\_archiver")
+        # Percent must be escaped
+        self.assertEqual(_escape_like("a%b"), "a\\%b")
+        # Backslash must be escaped first (otherwise it doubles up)
+        self.assertEqual(_escape_like("a\\b"), "a\\\\b")
+        # Plain strings pass through unchanged
+        self.assertEqual(_escape_like("claudebot"), "claudebot")
+
 
 # ============================================================================
 # /api/review/* offset behavior
