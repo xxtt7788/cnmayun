@@ -116,7 +116,7 @@ log.info("re-tagged %d rows as bot (FALSE -> TRUE)", result.rowcount)
 | `backfill_is_bot.py` | `is_bot IS NULL` | 部署后首跑，把 schema 迁移前的历史行分类 |
 | `reclassify_bot_signatures.py` (新) | `is_bot=FALSE` 且 UA 匹配新签名 | 修"签名不全导致漏判"的脏数据 |
 
-**执行环境**（沿用项目惯例，`app/OPERATIONS.md` 一致）：
+**执行环境**（沿用项目惯例，参见 `runner/OPERATIONS.md`）：
 
 ```bash
 cd /opt/china-succession
