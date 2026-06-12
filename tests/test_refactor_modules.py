@@ -211,6 +211,27 @@ class IsBotUserAgentTests(unittest.TestCase):
         self.assertTrue(is_bot_user_agent(""))
         self.assertTrue(is_bot_user_agent(None))
 
+    def test_claudebot(self) -> None:
+        # The actual UA observed in production /stats
+        self.assertTrue(is_bot_user_agent(
+            "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; "
+            "compatible; ClaudeBot/1.0; +claudebot@anthropic.com)"
+        ))
+
+    def test_perplexitybot(self) -> None:
+        self.assertTrue(is_bot_user_agent(
+            "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; "
+            "compatible; PerplexityBot/1.0; +https://perplexity.ai/perplexitybot.html)"
+        ))
+
+    def test_google_extended_is_blocked(self) -> None:
+        # google-extended is the Gemini training crawler, NOT the search crawler
+        # (which is Googlebot and intentionally allowed). Substring match must
+        # treat them separately.
+        self.assertTrue(is_bot_user_agent(
+            "Mozilla/5.0 (compatible; Google-Extended/1.0)"
+        ))
+
 
 # ============================================================================
 # /api/review/* offset behavior
