@@ -46,6 +46,7 @@
 | 2026-06-11 | AI 提取器人名修复：议案标题句不再生成低信号 hint；AI 与规则路径共用同一套人名校验，杜绝"经公"类假人名。spec 见 `docs/superpowers/specs/2026-06-11-ai-extractor-person-name-fixes-design.md` | ✅ |
 | 2026-06-12 | 访问统计 bot 过滤加固：`_BOT_SIGNATURES` 新增 15 个 AI 训练爬虫签名（含 ClaudeBot/PerplexityBot/Google-Extended），核心 SEO 爬虫保留放行；`scripts/reclassify_bot_signatures.py` 一键回填历史 `is_bot=FALSE` 误判行 + 触发 14 天 rollup 刷新 | ✅ |
 | 2026-06-12 | `data/` 清理：删除 35+ untracked 一次性 debug 脚本，git rm 22 个 sqlite/log 文件（保留在磁盘），`.gitignore` 加固；**安全修复** `data/deployment_credentials.txt`（含服务器 SSH 密码 + admin 密码）从仓库移除（仍在 git 历史，密码需轮换）；线上已部署新代码并 reclassify 370,571 行 + 重算 14 天 rollup 131,589 行 | ✅ |
+| 2026-06-13 | 审核队列 bug 修复：`_normalize_person_name` 拒绝 2-字常见虚词（"不再"等不再被当人名）；新增 `continuation` 事件类型（标签"续任"）识别"继续担任X/仍担任X"保留关系。源 bug：doc 18686（海南橡胶决议公告）。 | ✅ |
 
 ---
 
