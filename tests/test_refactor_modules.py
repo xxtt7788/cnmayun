@@ -259,13 +259,15 @@ class ReclassifySqlBuilderTests(unittest.TestCase):
         self.assertIn("LIKE :p1", sql)
 
     def test_binds_one_param_per_signature(self) -> None:
+        import re
         from scripts.reclassify_bot_signatures import build_reclassify_sql
         sql = build_reclassify_sql(["claudebot", "gptbot", "perplexitybot"])
         self.assertIn(":p0", sql)
         self.assertIn(":p1", sql)
         self.assertIn(":p2", sql)
-        # AND no spillover to p3
-        self.assertNotIn(":p3", sql)
+        # Catches spurious placeholders (count > 3) and indexing bugs (count < 3,
+        # duplicate :p0, etc.). More robust than the original "negative space" check.
+        self.assertEqual(len(re.findall(r":p\d+", sql)), 3)
 
 
 # ============================================================================
