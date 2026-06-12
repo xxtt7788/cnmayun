@@ -360,7 +360,7 @@ Expected: both tests in `ReclassifySqlBuilderTests` PASS.
 .venv/Scripts/python.exe -c "import scripts.reclassify_bot_signatures; print('OK', len(scripts.reclassify_bot_signatures._BOT_SIGNATURES), 'signatures')"
 ```
 
-Expected output: `OK 29 signatures` (15 AI + 14 SEO/link, matching the spec).
+Expected output: `OK 28 signatures` (15 AI + 13 SEO/link — `gptbot` moved from the SEO group to the AI group, so the net add is 14 not 15).
 
 - [ ] **Step 4: Commit**
 
@@ -382,7 +382,7 @@ git commit -m "feat(ops): add reclassify_bot_signatures script for historical cl
 .venv/Scripts/python.exe -m pytest tests/test_refactor_modules.py -v
 ```
 
-Expected: ALL tests PASS, including the 3 new bot cases and 2 new SQL builder cases. No regressions in cache / aggregator / API offset / PV bump-skip tests.
+Expected: ALL tests PASS, including the 3 new bot cases (test_claudebot, test_perplexitybot, test_google_extended_is_blocked) and 2 new SQL builder cases. No regressions in cache / aggregator / API offset / PV bump-skip tests.
 
 If anything fails: STOP, debug, do not proceed to Step 2.
 
