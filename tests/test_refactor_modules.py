@@ -265,6 +265,80 @@ class NormalizePersonNameRejectionTests(unittest.TestCase):
 
 
 # ============================================================================
+# Continuation event type — Bug B (doc 18686, 2026-06-12)
+# ============================================================================
+
+class ContinuationEventTests(unittest.TestCase):
+    """Bug B: '继续担任X' / '仍担任X' should produce a 'continuation' event,
+    distinct from 'non_renewal' (which fires for '不再担任X')."""
+
+    def test_continuation_event_from_continue_dan_ren(self) -> None:
+        from app.normalization import extract_events_from_text
+        events = extract_events_from_text("", "王宏向先生继续担任公司董事。")
+        cont = [e for e in events if e.event_type == "continuation"]
+        self.assertEqual(len(cont), 1, f"expected 1 continuation event, got {events}")
+        self.assertEqual(cont[0].person_name, "王宏向")
+        self.assertEqual(cont[0].role_canonical, "director")
+        self.assertGreaterEqual(cont[0].confidence, 0.90)
+
+    def test_continuation_event_from_reng_dan_ren(self) -> None:
+        from app.normalization import extract_events_from_text
+        events = extract_events_from_text("", "李四先生仍担任公司副董事长。")
+        cont = [e for e in events if e.event_type == "continuation"]
+        self.assertEqual(len(cont), 1, f"expected 1 continuation event, got {events}")
+        self.assertEqual(cont[0].person_name, "李四")
+        self.assertEqual(cont[0].role_canonical, "chairperson")
+        self.assertGreaterEqual(cont[0].confidence, 0.90)
+
+    def test_continuation_label_in_event_type_labels(self) -> None:
+        from app.normalization import event_type_label
+        self.assertEqual(event_type_label("continuation"), "续任")
+
+    def test_continuation_in_ai_allowed_types(self) -> None:
+        from app.ai_extractor import ALLOWED_EVENT_TYPES
+        self.assertIn("continuation", ALLOWED_EVENT_TYPES)
+
+    def test_continuation_appears_in_ai_system_prompt(self) -> None:
+        from app.ai_extractor import _SYSTEM_PROMPT
+        self.assertIn("continuation", _SYSTEM_PROMPT)
+
+    def test_end_to_end_bug_sentence_no_longer_hallucinates_bu_zai(self) -> None:
+        """The exact doc 18686 inputs. Asserts:
+        - (不再, ...) hint is NOT produced
+        - (王宏向, director, continuation) IS produced"""
+        from app.normalization import extract_review_hints_from_text
+        title = "第六届董事会第五十六次会议决议公告"
+        body = (
+            "证券代码：601118 证券简称：海南橡胶 公告编号：2026-032\n"
+            "海南天然橡胶产业集团股份有限公司第六届董事会第五十六次会议决议公告\n"
+            "本公司董事会及全体董事保证本公告内容不存在任何虚假记载、误导性陈述\n"
+            "或者重大遗漏，并对其内容的真实性、准确性和完整性承担法律责任。\n"
+            "海南天然橡胶产业集团股份有限公司（以下简称\"公司\"）第六届董事会第\n"
+            "五十六次会议于 2026 年 6 月 11 日以通讯表决方式召开。\n"
+            "一、审议通过《海南橡胶关于选举第六届董事会董事长的议案》\n"
+            "同意选举易金波先生为公司第六届董事会董事长，任期与公司第六届董事会\n"
+            "同步。王宏向先生不再担任公司董事长职务，继续担任公司董事。\n"
+            "二、审议通过《海南橡胶关于调整董事会专门委员会成员的议案》\n"
+            "王宏向先生不再担任董事会各专门委员会相关职务。\n"
+        )
+        hints = extract_review_hints_from_text(title, body, limit=8)
+        person_event_pairs = [(h.person_name, h.event_type) for h in hints]
+
+        # Bug A fix: no "不再" hallucination
+        self.assertNotIn(
+            ("不再", "non_renewal"),
+            person_event_pairs,
+            f"still hallucinating '不再' as person: {person_event_pairs}",
+        )
+        # Bug B fix: (王宏向, director, continuation) present
+        self.assertIn(
+            ("王宏向", "continuation"),
+            person_event_pairs,
+            f"missing (王宏向, continuation): {person_event_pairs}",
+        )
+
+
+# ============================================================================
 # scripts.reclassify_bot_signatures.build_reclassify_sql
 # ============================================================================
 
