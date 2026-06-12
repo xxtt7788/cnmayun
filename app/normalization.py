@@ -90,6 +90,25 @@ NON_PERSONNEL_SENTENCE_KEYWORDS = (
 )
 
 INVALID_PERSON_TOKENS = ("第", "届", "董事会", "监事会", "委员会", "公司", "议案", "公告", "候选人", "专门会议")
+
+# 2-char non-person tokens: exact-match rejection. These are common 2-char
+# adverbs / function words that look like Chinese names (2 Chinese chars)
+# but are never actually person names. Doc 18686 / 2026-06-12 bug surfaced
+# "不再" being accepted as a person name (extracted from "不再担任董事会各
+# 专门委员会相关职务" via the fallback regex).
+_NON_PERSON_2CHAR_TOKENS: frozenset[str] = frozenset({
+    # 否定 / 继续类副词
+    "不再", "续任", "仍在", "继续", "持续",
+    "原有", "原任", "原系", "原拟", "原为",
+    "前为", "前述",
+    # 仍 X 系
+    "仍由", "仍将", "仍任", "仍系",
+    # 易误识的虚词
+    "本人", "该等", "其他", "其余",
+    "上述", "如下", "如上",
+    "本次", "本届", "本期", "本项",
+    "该人", "对方", "他人",
+})
 LATIN_PERSON_PATTERN = r"[A-Za-z][A-Za-z .'\-]{1,40}[A-Za-z]"
 
 PERSON_PATTERNS = (
@@ -351,6 +370,12 @@ def _normalize_person_name(raw_name: str) -> str | None:
     normalized = re.sub(r"[先女男已]+$", "", normalized).strip()
     if re.fullmatch(r"[\u4e00-\u9fa5]{2,4}", normalized):
         if any(token in normalized for token in INVALID_PERSON_TOKENS):
+            return None
+        # Bug A fix (doc 18686, 2026-06-12): reject 2-char adverbs / function
+        # words that are valid Chinese chars but never person names. Exact
+        # match (only when length == 2) to avoid false positives on 3+ char
+        # names that happen to contain a 2-char adverb substring.
+        if len(normalized) == 2 and normalized in _NON_PERSON_2CHAR_TOKENS:
             return None
         if any(token in normalized for token in ("经理", "董事", "委员", "主席", "主持", "列席")):
             return None
