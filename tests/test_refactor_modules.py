@@ -234,6 +234,37 @@ class IsBotUserAgentTests(unittest.TestCase):
 
 
 # ============================================================================
+# app.normalization._normalize_person_name — 2-char non-person token rejection
+# ============================================================================
+
+class NormalizePersonNameRejectionTests(unittest.TestCase):
+    """Bug A (doc 18686, 2026-06-12): 2-char adverbs like '不再' were being
+    accepted as person names. The fix is an exact-match rejection set."""
+
+    def test_rejects_bu_zai(self) -> None:
+        # The exact case from the production bug
+        from app.normalization import _normalize_person_name
+        self.assertIsNone(_normalize_person_name("不再"))
+
+    def test_rejects_xu_ren(self) -> None:
+        from app.normalization import _normalize_person_name
+        self.assertIsNone(_normalize_person_name("续任"))
+
+    def test_rejects_ji_xu(self) -> None:
+        from app.normalization import _normalize_person_name
+        self.assertIsNone(_normalize_person_name("继续"))
+
+    def test_still_accepts_real_2char_name(self) -> None:
+        # 2-char real Chinese names must still pass (no false positive on real names)
+        from app.normalization import _normalize_person_name
+        self.assertEqual(_normalize_person_name("易金"), "易金")
+
+    def test_still_accepts_3char_name(self) -> None:
+        from app.normalization import _normalize_person_name
+        self.assertEqual(_normalize_person_name("王宏向"), "王宏向")
+
+
+# ============================================================================
 # scripts.reclassify_bot_signatures.build_reclassify_sql
 # ============================================================================
 
