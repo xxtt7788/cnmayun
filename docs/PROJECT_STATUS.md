@@ -44,6 +44,7 @@
 | 2026-06-10 | 回填脚本：`scripts/backfill_is_bot.py`（pre-deploy 行的 is_bot）+ `scripts/backfill_page_view_daily.py` | ✅ |
 | 2026-06-10 | 重构模块单测：`tests/test_refactor_modules.py` 32 个 case（cache、aggregator、bot detection、API offset、bump-skip） | ✅ |
 | 2026-06-11 | AI 提取器人名修复：议案标题句不再生成低信号 hint；AI 与规则路径共用同一套人名校验，杜绝"经公"类假人名。spec 见 `docs/superpowers/specs/2026-06-11-ai-extractor-person-name-fixes-design.md` | ✅ |
+| 2026-06-12 | 访问统计 bot 过滤加固：`_BOT_SIGNATURES` 新增 15 个 AI 训练爬虫签名（含 ClaudeBot/PerplexityBot/Google-Extended），核心 SEO 爬虫保留放行；`scripts/reclassify_bot_signatures.py` 一键回填历史 `is_bot=FALSE` 误判行 + 触发 14 天 rollup 刷新 | ✅ |
 
 ---
 
