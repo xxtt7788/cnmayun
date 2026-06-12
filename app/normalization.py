@@ -16,6 +16,7 @@ ROLE_LABELS = {
 
 EVENT_TYPE_LABELS = {
     "appointment": "任命",
+    "continuation": "续任",
     "resignation": "辞职",
     "removal": "免职",
     "reelection": "换届连任",
@@ -184,6 +185,11 @@ EVENT_PATTERNS: tuple[tuple[str, str, float], ...] = (
         r"(?P<name>[\u4e00-\u9fa5]{2,4})(先生|女士)?因退休辞去(?P<role>[^，,。.;；\n]{0,24})职务",
         0.96,
     ),
+    (
+        "continuation",
+        r"(?P<name>[一-龥]{2,4})(先生|女士)?[^。.;；\n]{0,40}?(?:继续|仍)担任(?P<role>[^，,。.;；\n]{0,24})",
+        0.92,
+    ),
 )
 
 
@@ -264,7 +270,12 @@ def _director_role_match(text: str) -> bool:
         r"辞去董事",
         r"不再担任董事",
         r"被提名为董事",
-        r"选举[^，,。.;；\\n]{0,10}为董事(?!长)",
+        r"选举[^，,。.;；\n]{0,10}为董事(?!长)",
+        # Bug B fix: capture bare "董事" as director when the EVENT_PATTERN
+        # role capture is just the position (e.g. "公司董事" from
+        # "继续担任公司董事"). (?!...) excludes 董事长 / 董事会 /
+        # 董事候选人 / 董事职务 which are handled by other rules.
+        r"^(公司|本公司|集团|上市公司|股份公司|责任公司)董事$",
     )
     return any(re.search(pattern, text) for pattern in explicit_patterns)
 
@@ -321,6 +332,8 @@ def infer_event_type_from_title(title: str) -> str | None:
         return "removal"
     if "退休" in normalized:
         return "retirement"
+    if "继续担任" in normalized or "仍担任" in normalized or "续任" in normalized:
+        return "continuation"
     if "不再担任" in normalized or "未续任" in normalized:
         return "non_renewal"
     if "调整" in normalized or "变更" in normalized:

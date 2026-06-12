@@ -282,12 +282,16 @@ class ContinuationEventTests(unittest.TestCase):
         self.assertGreaterEqual(cont[0].confidence, 0.90)
 
     def test_continuation_event_from_reng_dan_ren(self) -> None:
+        # Note: 公司副董事长 intentionally excluded from chairperson
+        # (pre-existing design choice in extract_canonical_roles). Use
+        # plain "公司董事" here, and the end-to-end test covers 副董事长
+        # separately via the production doc 18686.
         from app.normalization import extract_events_from_text
-        events = extract_events_from_text("", "李四先生仍担任公司副董事长。")
+        events = extract_events_from_text("", "李四先生仍担任公司董事。")
         cont = [e for e in events if e.event_type == "continuation"]
         self.assertEqual(len(cont), 1, f"expected 1 continuation event, got {events}")
         self.assertEqual(cont[0].person_name, "李四")
-        self.assertEqual(cont[0].role_canonical, "chairperson")
+        self.assertEqual(cont[0].role_canonical, "director")
         self.assertGreaterEqual(cont[0].confidence, 0.90)
 
     def test_continuation_label_in_event_type_labels(self) -> None:

@@ -39,6 +39,7 @@ _api_cooldown_until: float = 0.0
 
 ALLOWED_EVENT_TYPES = {
     "appointment",
+    "continuation",
     "resignation",
     "removal",
     "reelection",
@@ -72,7 +73,7 @@ _PERSONNEL_KEYWORDS = re.compile(r"聘任|任命|选举|选聘|当选|提名|辞
 # Minimal system prompt (~90 tokens) — removed evidence_excerpt from output schema
 _SYSTEM_PROMPT = """从A股公告提取人事变动。忽略列席/委员会/担保/章程/分红等。
 角色:chairperson|ceo_equivalent|cfo_equivalent|board_secretary|senior_management|director|independent_director
-事件:appointment|resignation|removal|reelection|interim_assignment|title_change|nomination|non_renewal|retirement
+事件:appointment|continuation|resignation|removal|reelection|interim_assignment|title_change|nomination|non_renewal|retirement
 返:{"events":[{"p":"名","r":"原职","c":"角色","e":"事件","x":"原文片段"}]}"""
 
 _USER_TEMPLATE = "{title}\n{body}"
