@@ -1,3 +1,0 @@
-INFO:     127.0.0.1:63802 - "POST /login HTTP/1.1" 303 See Other
-INFO:     127.0.0.1:63803 - "GET /api/launch-readiness HTTP/1.1" 200 OK
-INFO:     127.0.0.1:63804 - "GET /api/launch-readiness HTTP/1.1" 200 OK

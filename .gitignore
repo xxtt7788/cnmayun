@@ -31,3 +31,39 @@ Thumbs.db
 .gstack/
 pending_*.txt
 sample_doc.txt
+
+# data/ transient debug & deploy artifacts (see scripts/reclassify_bot_signatures.py
+# is the only legitimate script there; everything else under data/ that matches
+# these patterns is one-off debugging material)
+data/_*.py
+data/debug_*.py
+data/diag*.py
+data/diag_*.py
+data/verify_*.py
+data/recover*.py
+data/fix_*.py
+data/run_*.py
+data/check_*.py
+data/test_*.py
+data/analyze_*.py
+data/inspect_*.py
+data/process_*.py
+data/profile_*.py
+data/auto_approve.py
+data/wait_for_ready.py
+data/deploy_*.py
+data/deploy_*.zip
+data/person_name_fix.zip
+data/deploy_perf_fix.zip
+data/china-succession-deploy-*.zip
+data/*.db
+data/*.db-journal
+data/*.log
+data/*.err.log
+data/*.out.log
+data/uvicorn-*.log
+data/web_*.log
+data/server.*.log
+data/overnight_maintenance.*.log
+data/sync_remaining_*.log
+data/deployment_credentials.txt
