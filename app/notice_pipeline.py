@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.ai_extractor import ai_extraction_available, extract_events_with_ai
 from app.cninfo import AnnouncementEntry, fetch_binary, fetch_management_announcements
+from app.event_propagation import apply_event_to_tenures as _propagate_event_to_tenures
 from app.config import settings
 from app.document_parser import extract_pdf_text
 from app.models import (
@@ -347,7 +348,7 @@ def evaluate_notice_auto_review(title: str, body_text: str) -> AutoReviewDecisio
             ai_candidate_count=len(ai_candidates),
         )
 
-    simple_event_types = {"appointment", "resignation", "removal", "interim_assignment", "title_change", "non_renewal", "retirement"}
+    simple_event_types = {"appointment", "resignation", "removal", "interim_assignment", "title_change", "non_renewal", "retirement", "continuation"}
     simple_document = all(candidate.event_type in simple_event_types for candidate in merged_candidates)
     single_candidate = len(merged_candidates) == 1
     high_confidence = all(candidate.confidence >= settings.low_confidence_threshold for candidate in merged_candidates)
@@ -771,6 +772,7 @@ def _process_announcement(db: Session, sync_job: SyncJob, item: AnnouncementEntr
         )
         created_count += 1
         if event.event_status == "published":
+            _propagate_event_to_tenures(db, event)  # 2026-06-13: events→role_tenures
             _create_alerts_for_event(db, event)
             continue
         review_count += 1
@@ -838,6 +840,7 @@ def reprocess_review_item(db: Session, review_id: int) -> tuple[int, int] | None
         )
         created_count += 1
         if event.event_status == "published":
+            _propagate_event_to_tenures(db, event)  # 2026-06-13: events→role_tenures
             _create_alerts_for_event(db, event)
             continue
         review_count += 1

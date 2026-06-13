@@ -343,6 +343,167 @@ class ContinuationEventTests(unittest.TestCase):
 
 
 # ============================================================================
+# app.event_propagation.apply_event_to_tenures (2026-06-13 audit fix)
+# ============================================================================
+
+class EventPropagationTests(unittest.TestCase):
+    """The events table records raw personnel changes. role_tenures is the
+    denormalized cache used by /people, /companies, /feed. These tests
+    lock in the propagation contract: every published event MUST update
+    role_tenures so the public pages reflect the latest state.
+    """
+
+    def setUp(self) -> None:
+        from app.db import SessionLocal
+        from app.models import Company, Person, RoleTenure
+        from datetime import date
+        import time, random
+        # Fresh per-test data to avoid cross-test contamination
+        suffix = f"{int(time.time()*1000) % 1000000:06d}{random.randint(0, 999):03d}"
+        self.ticker = f"PR{suffix}"
+        self.db = SessionLocal()
+        self.company = Company(
+            exchange="SZSE", ticker=self.ticker, current_ticker=self.ticker,
+            org_id=f"prop-{self.ticker}", company_name=f"prop test {self.ticker}",
+        )
+        self.db.add(self.company); self.db.flush()
+        self.persons = []
+        for n in [f"张A{suffix}", f"李B{suffix}"]:
+            p = Person(canonical_name=n, alias_names="[]")
+            self.db.add(p); self.db.flush()
+            self.persons.append(p)
+        # Pre-existing bootstrap-inferred active tenure
+        self.tenure = RoleTenure(
+            person_id=self.persons[0].id, company_id=self.company.id,
+            role_canonical="chairperson", role_raw_latest="董事长",
+            start_date=date(2024, 1, 1), end_date=None, is_active=True,
+            inferred_flag=True, confidence=1.0,
+        )
+        self.db.add(self.tenure); self.db.commit()
+
+    def tearDown(self) -> None:
+        from app.models import Event, RoleTenure, Person, Company
+        try:
+            self.db.query(RoleTenure).filter(RoleTenure.company_id == self.company.id).delete()
+            self.db.query(Event).filter(Event.company_id == self.company.id).delete()
+            self.db.query(Person).filter(Person.id.in_([p.id for p in self.persons])).delete()
+            self.db.query(Company).filter(Company.id == self.company.id).delete()
+            self.db.commit()
+        finally:
+            self.db.close()
+
+    def _make_event(self, *, person, event_type, role_canonical, status="published"):
+        from app.models import Event
+        from datetime import date
+        from decimal import Decimal
+        e = Event(
+            company_id=self.company.id, person_id=person.id,
+            source_document_id=0,
+            role_raw=role_canonical, role_canonical=role_canonical,
+            event_type=event_type, event_status=status,
+            event_reason_raw="test",
+            announcement_date=date(2026, 6, 1), effective_date=date(2026, 6, 1),
+            excerpt="test", confidence=Decimal("0.9500"),
+            is_inferred=False, published_at=date(2026, 6, 1),
+        )
+        self.db.add(e); self.db.flush()
+        return e
+
+    def _active_tenure(self, person, role_canonical):
+        from app.models import RoleTenure
+        return self.db.query(RoleTenure).filter(
+            RoleTenure.person_id == person.id,
+            RoleTenure.company_id == self.company.id,
+            RoleTenure.role_canonical == role_canonical,
+            RoleTenure.is_active.is_(True),
+        ).first()
+
+    def test_non_renewal_closes_existing_tenure(self) -> None:
+        from app.event_propagation import apply_event_to_tenures
+        from datetime import date
+        self.assertIsNotNone(self._active_tenure(self.persons[0], "chairperson"))
+        ev = self._make_event(person=self.persons[0], event_type="non_renewal", role_canonical="chairperson")
+        affected = apply_event_to_tenures(self.db, ev)
+        self.db.commit()
+        self.assertEqual(affected, 1)
+        self.assertIsNone(self._active_tenure(self.persons[0], "chairperson"))
+
+    def test_appointment_creates_new_tenure(self) -> None:
+        from app.event_propagation import apply_event_to_tenures
+        from datetime import date
+        self.assertIsNone(self._active_tenure(self.persons[1], "ceo_equivalent"))
+        ev = self._make_event(person=self.persons[1], event_type="appointment", role_canonical="ceo_equivalent")
+        affected = apply_event_to_tenures(self.db, ev)
+        self.db.commit()
+        self.assertEqual(affected, 1)
+        active = self._active_tenure(self.persons[1], "ceo_equivalent")
+        self.assertIsNotNone(active)
+        self.assertEqual(active.start_date, date(2026, 6, 1))
+        self.assertEqual(active.inferred_flag, False)
+
+    def test_continuation_keeps_existing_tenure(self) -> None:
+        from app.event_propagation import apply_event_to_tenures
+        from app.models import RoleTenure
+        from datetime import date
+        # Add a director tenure
+        self.db.add(RoleTenure(
+            person_id=self.persons[0].id, company_id=self.company.id,
+            role_canonical="director", role_raw_latest="董事",
+            start_date=date(2024, 1, 1), is_active=True, inferred_flag=True, confidence=1.0,
+        ))
+        self.db.commit()
+        ev = self._make_event(person=self.persons[0], event_type="continuation", role_canonical="director")
+        affected = apply_event_to_tenures(self.db, ev)
+        self.db.commit()
+        self.assertEqual(affected, 1)
+        active = self._active_tenure(self.persons[0], "director")
+        self.assertIsNotNone(active)
+        self.assertEqual(active.role_raw_latest, "director")
+
+    def test_skips_unpublished_event(self) -> None:
+        from app.event_propagation import apply_event_to_tenures
+        # 张三A has active chairperson tenure from setUp
+        self.assertIsNotNone(self._active_tenure(self.persons[0], "chairperson"))
+        ev = self._make_event(person=self.persons[0], event_type="non_renewal",
+                              role_canonical="chairperson", status="review_required")
+        affected = apply_event_to_tenures(self.db, ev)
+        self.db.commit()
+        self.assertEqual(affected, 0)
+        # Active tenure should still be open
+        self.assertIsNotNone(self._active_tenure(self.persons[0], "chairperson"))
+
+    def test_skips_nomination_event(self) -> None:
+        from app.event_propagation import apply_event_to_tenures
+        ev = self._make_event(person=self.persons[1], event_type="nomination",
+                              role_canonical="independent_director")
+        affected = apply_event_to_tenures(self.db, ev)
+        self.db.commit()
+        self.assertEqual(affected, 0)
+
+    def test_idempotent_double_close(self) -> None:
+        from app.event_propagation import apply_event_to_tenures
+        ev1 = self._make_event(person=self.persons[0], event_type="non_renewal", role_canonical="chairperson")
+        ev2 = self._make_event(person=self.persons[0], event_type="non_renewal", role_canonical="chairperson")
+        a1 = apply_event_to_tenures(self.db, ev1)
+        a2 = apply_event_to_tenures(self.db, ev2)
+        self.db.commit()
+        self.assertEqual(a1, 1)
+        self.assertEqual(a2, 0)  # second call is no-op
+
+    def test_close_then_open_different_role(self) -> None:
+        from app.event_propagation import apply_event_to_tenures
+        ev_close = self._make_event(person=self.persons[0], event_type="non_renewal", role_canonical="chairperson")
+        ev_open = self._make_event(person=self.persons[0], event_type="appointment", role_canonical="director")
+        a1 = apply_event_to_tenures(self.db, ev_close)
+        a2 = apply_event_to_tenures(self.db, ev_open)
+        self.db.commit()
+        self.assertEqual(a1, 1)
+        self.assertEqual(a2, 1)
+        self.assertIsNone(self._active_tenure(self.persons[0], "chairperson"))
+        self.assertIsNotNone(self._active_tenure(self.persons[0], "director"))
+
+
+# ============================================================================
 # scripts.reclassify_bot_signatures.build_reclassify_sql
 # ============================================================================
 
